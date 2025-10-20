@@ -1,0 +1,116 @@
+# SOURCE: https://learn.microsoft.com/en-us/azure/app-service/quickstart-dotnetcore?tabs=net80&pivots=development-environment-cli
+# DATE: 10-07-2025
+
+# Variables
+appname="testwebapp"
+rg="rg-webapp"
+location="northeurope"
+os="linux"
+ 
+# Create the app
+dotnet new webapp -n $appname --framework net9.0
+cd $appname
+
+# run the app
+dotnet run --urls=https://localhost:5001/
+CTRL+C
+
+# Deploy to Azure
+# Login to  my tenant (599fd2f6-80be-4f0d-9b03-b3e74fdcf211), avoiding work tenant 
+az login --tenant pietronromanolive.onmicrosoft.com
+
+# Private endpoints are available for Windows and Linux apps, containerized or not, hosted on the following App Service plans: Basic, Standard, PremiumV2, PremiumV3, IsolatedV2, Functions Premium (sometimes called the Elastic Premium plan).
+az webapp up --sku S1 --name $appname --os-type $os --location $location --resource-group $rg
+# RESULTS:
+{
+  "URL": "http://pnr-eus-myfirstwebapp.azurewebsites.net",
+  "appserviceplan": "pietronromano_asp_7142",
+  "location": "eastus2",
+  "name": "pnr-eus-myfirstwebapp",
+  "os": "Linux",
+  "resourcegroup": "rg-eus",
+  "runtime_version": "dotnetcore|9.0",
+  "runtime_version_detected": "9.0",
+  "sku": "STANDARD",
+  "src_path": "//Users//macbookpro//dev//azure//azcli//webapp//pnr-eus-myfirstwebapp"
+}
+
+# Update Pages/Index.cshtml locally, then redeploy (need $os as default is to windows)
+az webapp up --name $appname --os-type $os
+
+# Private Endpoint
+# NOTE!! THIS DISABLES THE PUBLIC ACCESS URL
+# SOURCE: 
+ - https://learn.microsoft.com/en-us/azure/private-link/create-private-endpoint-cli
+ - https://docs.azure.cn/en-us/app-service/overview-private-endpoint
+ - https://learn.microsoft.com/en-us/cli/azure/network/private-endpoint?view=azure-cli-latest#az-network-private-endpoint-create
+
+
+# Web App: Get groupId: sites
+az network private-link-resource list -g $rg --type Microsoft.Web/sites -n $appname
+
+id=$(az webapp list \
+    --resource-group $rg \
+    --query '[].[id]' \
+    --output tsv)
+echo $id
+
+# Private endpoint
+pe="pe-"$appname
+vnet="vnet-1"
+subnet="front-tier"
+connection="pe-connection-1"
+
+
+az network private-endpoint create \
+    --connection-name $connection \
+    --name $pe \
+    --private-connection-resource-id $id \
+    --resource-group $rg \
+    --subnet $subnet \
+    --group-id sites \
+    --vnet-name $vnet 
+
+# Configure the private DNS zone
+dnszone="privatelink.azurewebsites.net"
+
+# Create a new private Azure DNS zone with az network private-dns zone create.
+az network private-dns zone create \
+    --resource-group $rg \
+    --name $dnszone
+
+# Link the DNS zone to the Virtual Network you created previously with az network private-dns link vnet create.
+az network private-dns link vnet create \
+    --resource-group $rg \
+    --zone-name $dnszone \
+    --name dns-link \
+    --virtual-network $vnet \
+    --registration-enabled false
+
+# Create a Private Endpoint DNS zone group with az network private-endpoint dns-zone-group create.
+az network private-endpoint dns-zone-group create \
+    --resource-group $rg \
+    --endpoint-name $pe \
+    --name zone-group \
+    --private-dns-zone $dnszone \
+    --zone-name webapp
+
+
+# connect to VM
+ssh -i ~/.ssh/id_rsa pietronromano@68.154.8.126
+
+# From within VM, nslookup to WebApp Private Endpoint
+nslookup  pnr-eus-myfirstwebapp.azurewebsites.net
+
+# RESULTS
+Server:         127.0.0.53
+Address:        127.0.0.53#53
+
+Non-authoritative answer:
+pnr-eus-myfirstwebapp.azurewebsites.net canonical name = pnr-eus-myfirstwebapp.privatelink.azurewebsites.net.
+Name:   pnr-eus-myfirstwebapp.privatelink.azurewebsites.net
+Address: 10.3.1.6
+
+# Delete the webapp and empty plan
+az webapp delete --name $appname 
+

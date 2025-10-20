@@ -1,1 +1,1 @@
-# azure-cli
+# Azure CLI Exmaples

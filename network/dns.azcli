@@ -1,0 +1,164 @@
+# SOURCE: https://learn.microsoft.com/en-us/azure/dns/private-dns-getstarted-cli
+# DATE: 10-08-2025
+# RESULTS: WORKED FINE! 
+
+# Variables
+rg="rg-dns"
+location="northeurope"
+vnet1="vnet-1"
+vnet2="vnet-2"
+subnet1="subnet-1"
+subnet2="subnet-2"
+vm1="vm-1"
+vm2="vm-2"
+vmvnet2="vm-vnet-2"
+vm_username="pietronromano"
+vm_pwd="Axml-xsl0123"
+dns_link_vnet1="dns-link-vnet-1"
+dns_link_vnet2="dns-link-vnet-2"
+zone="private.contoso.com"
+
+
+# Create RG
+az group create --name $rg --location $location
+
+
+#VNet1
+az network vnet create \
+  --name $vnet1 \
+  --resource-group $rg \
+  --location $location \
+  --address-prefix 10.1.0.0/16 \
+  --subnet-name $subnet1 \
+  --subnet-prefixes 10.1.1.0/24
+
+az network vnet subnet create \
+    --name $subnet2 \
+    --resource-group $rg \
+    --vnet-name $vnet1 \
+    --address-prefixes 10.1.2.0/24
+
+
+# VMs
+## VM1, in subnet1
+az vm create \
+ -n $vm1 \
+ --admin-username $vm_username \
+ --admin-password $vm_pwd \
+ -g $rg \
+ -l $location \
+ --subnet $subnet1 \
+ --vnet-name $vnet1 \
+ --nsg NSG01 \
+ --nsg-rule RDP \
+ --image win2022datacenter \
+ --size Standard_D2ds_v6 
+
+az vm auto-shutdown -g $rg -n $vm1 --time 1730 --email "pietronromano@live.com"
+
+## VM2, in subnet2
+az vm create \
+ -n $vm2 \
+ --admin-username $vm_username \
+ --admin-password $vm_pwd \
+ -g $rg \
+ -l $location \
+ --subnet $subnet2 \
+ --vnet-name $vnet1 \
+ --nsg NSG01 \
+ --nsg-rule RDP \
+ --image win2022datacenter \
+ --size Standard_D2ds_v6 
+
+ az vm auto-shutdown -g $rg -n $vm2 --time 1730 --email "pietronromano@live.com"
+
+# Remote into VMs, before adding the private zone
+- VM1 and VM2 can resolve dns names, as they're in the same VNet
+- VM3 can't be seen
+# From vm-1, nslookup works fine
+nslookup 10.1.2.4
+
+    Server:  UnKnown
+    Address:  168.63.129.16
+    Name:    vm-2.internal.cloudapp.net
+    Address:  10.1.2.4
+
+
+#VNet2
+az network vnet create \
+  --name $vnet2 \
+  --resource-group $rg \
+  --location $location \
+  --address-prefix 10.2.0.0/16 \
+  --subnet-name $subnet1 \
+  --subnet-prefixes 10.2.1.0/24
+
+## vmvnet2, in VNet2
+az vm create \
+ -n $vmvnet2 \
+ --admin-username $vm_username \
+ --admin-password $vm_pwd \
+ -g $rg \
+ -l $location \
+ --subnet $subnet1 \
+ --vnet-name $vnet2 \
+ --nsg NSG01 \
+ --nsg-rule RDP \
+ --image win2022datacenter \
+ --size Standard_D2ds_v6 
+
+ az vm auto-shutdown -g $rg -n $vmvnet2 --time 1730 --email "pietronromano@live.com"
+
+
+# Remote into VMs, before adding the private zone
+## Still from vm-1, nslookup doesn't work to vm-vnet-2
+nslookup 10.2.1.4
+
+    Server:  UnKnown
+    Address:  168.63.129.16
+    *** UnKnown can't find 10.2.1.4: Non-existent domain
+
+
+
+
+# DNS zones
+## List all zones in the subscription
+az network private-dns zone list --query "[].{ResourceGroup:resourceGroup, Zone:name}" -o table
+
+## Create Zone
+az network private-dns zone create -g $rg \
+   -n $zone
+
+## Link zone to VNet1
+az network private-dns link vnet create \
+    -g $rg \
+    -n $dns_link_vnet1 \
+    -z $zone \
+    -v $vnet1 \
+    -e true
+
+## Link zone to VNet2: should now allow vm1 to set vm in vnet2
+az network private-dns link vnet create \
+    -g $rg \
+    -n $dns_link_vnet2 \
+    -z $zone \
+    -v $vnet2 \
+    -e true
+
+# Create a dns record for vm1, call it vm1db
+az network private-dns record-set a add-record \
+  -g $rg \
+  -z $zone \
+  -n vm1db \
+  -a 10.1.1.4
+
+## From vm-vnet-2, this now works: nslookup vm1db.private.contoso.com
+
+# list the DNS records in your zone, run:
+az network private-dns record-set list \
+  -g $rg \
+  -z $zone
+
+# Configure vms to allow ICMP
+## From inside vm
+New-NetFirewallRule –DisplayName "Allow ICMPv4-In" –Protocol ICMPv4

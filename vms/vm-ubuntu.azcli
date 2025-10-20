@@ -1,0 +1,107 @@
+
+#
+username="pietronromano"
+
+# Resource group
+rg="rg-eus"
+location="eastus2"
+
+rg="rg-neu"
+location="northeurope"
+
+az group create --name $rg --location $location
+
+# vnet
+vnet="vnet-eus"
+vnet="vnet-neu"
+
+subnet="front-tier"
+subnet="middle-tier"
+subnet="back-tier"
+
+# vm
+vm="vm-neu-front"
+vm="vm-neu-middle"
+vm="vm-neu-back"
+
+# List existing vms
+az vm list --resource-group $rg -o table
+
+# List vm images
+az vm image list --output table
+# List available skus (--all lists ALL skus, available or not) --size Standard_D
+az vm list-skus --location $location  --output table
+
+## NOTE: MUST execute this command from the SAME folder as the cloud-init: 
+## otherwise cloud-init won't be included and no warning is given
+cd /Users/macbookpro/dev/azure/azcli/vm
+cloud_init="vm-ubuntu-cloud-init.txt"
+# Check we're here
+cat $cloud_init
+
+az vm create \
+    --resource-group $rg \
+    --name $vm \
+    --image Ubuntu2404 \
+    --size Standard_D2ds_v6 \
+    --admin-username $username \
+    --generate-ssh-keys \
+    --vnet-name $vnet \
+    --subnet $subnet \
+    --custom-data $cloud_init
+
+az vm auto-shutdown -g $rg -n $vm --time 1730 --email "pietronromano@live.com" 
+
+# Open ports
+az vm open-port --port 80 --resource-group $rg --name $vm
+
+
+# Connect
+ip=$(az vm show --show-details --resource-group $rg --name $vm --query publicIps --output tsv)
+echo $ip
+
+## private key is here by default: /Users/macbookpro/.ssh, I also copied it to azcli folder
+ssh -i ~/.ssh/id_rsa $username@$ip
+curl $ip
+
+
+## From inside VM, 
+### curl to http site (NOTE: 502 Bad Gateway will happen if admin-username doesn't match init owner)
+curl localhost
+
+### network commands
+hostname
+
+## Note the Azure VM knows nothing of the Public IP it has associated
+ifconfig
+
+resolvectl status
+nslookup vm-neu-front
+# Azure has no ARP, layer 2, so this is the same in all VMs
+arp-an
+
+
+### Debug the clout-init logs:
+less /var/log/cloud-init-output.log
+grep "nginx" /var/log/cloud-init-output.log
+
+exit
+
+
+# NOTE! After stopping, node.js app doesn't restart automatically -> have to start manually
+pietronromano@vm-eus-front:~$ cd "/home/pietronromano/myapp"
+pietronromano@vm-eus-front:/home/pietronromano/myapp$ nodejs index.js
+Hello world app listening on port 3000!
+
+# Start / Stop
+az vm start -g $rg -n $vm
+# NOTE STOP: It will continue to be billed. To deallocate a VM, run: az vm deallocate.
+az vm stop -g $rg -n $vm
+az vm deallocate -g $rg -n $vm
+
+# delete vm (NOTE: doesn't delete related resources)
+az vm delete \
+    --resource-group $rg \
+    --name $vm \
+    --force-deletion true
+    --yes

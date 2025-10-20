@@ -1,0 +1,205 @@
+# SOURCE: https://learn.microsoft.com/en-us/azure/firewall/deploy-cli
+# DATE/RESULTS: 
+  - 06-08-2025 
+
+
+
+# Variables
+rg="rg-fw"
+location="northeurope"
+vnet="vnet-fw"
+subnet_workload="subnet-workload"
+subnet_jump="subnet-jump"
+vm_workload="vm-workload"
+vm_jump="vm-jump"
+nic_workload="nic-workload"
+pip_fw="pip-fw"
+fw="firewall-01"
+fw_ip_config="fw-ip-config"
+fw_rt_table="fw-rt-table"
+fw_rt_route="fw-rt-route"
+fw_app_rule="fw-app-rule-01"
+
+# Create resource group
+az group create --name $rg --location $location
+
+# Create vnet
+az network vnet create \
+  --name $vnet \
+  --resource-group $rg \
+  --location $location \
+  --address-prefix 10.0.0.0/16 \
+  --subnet-name AzureFirewallSubnet \
+  --subnet-prefix 10.0.1.0/26
+
+
+# Create the subnets
+az network vnet subnet create \
+    --name $subnet_workload \
+    --resource-group $rg \
+    --vnet-name $vnet \
+    --address-prefixes 10.0.2.0/24
+
+az network vnet subnet create \
+    --name $subnet_jump \
+    --resource-group $rg \
+    --vnet-name $vnet \
+    --address-prefixes 10.0.3.0/24
+
+
+# Create virtual machines
+## Create the jump virtual machine.
+az vm create \
+    --resource-group $rg \
+    --name $vm_jump \
+    --location $location \
+    --image Win2022AzureEditionCore \
+    --size Standard_D2ds_v6 \
+    --vnet-name $vnet \
+    --subnet $subnet_jump \
+    --admin-username pietronromano \
+    --admin-password Axml-xsl0123
+
+az vm open-port --port 3389 --resource-group $rg --name $vm_jump
+az vm auto-shutdown -g $rg -n $vm_jump --time 1900 --email "pietronromano@live.com" 
+
+# Start / Stop
+az vm start -g $rg -n $vm_jump
+# NOTE STOP: It will continue to be billed. To deallocate a VM, run: az vm deallocate.
+az vm stop -g $rg -n $vm_jump
+az vm deallocate -g $rg -n $vm_jump
+
+# NOTE: Gives ERROR 
+#    -  "Please make sure that the referenced resource exists, and that both resources are in the same region.azcli"
+#    -  but seems to create the NIC
+# Create a NIC for workload vm with specific DNS server IP addresses and no public IP address to test with
+az network nic create \
+    -g $rg \
+    -n $nic_workload \
+   --vnet-name $vnet \
+   --subnet $subnet_workload \
+   --location $location \
+   --public-ip-address "" \
+   --dns-servers 209.244.0.3,209.244.0.4
+
+
+# Now create the workload virtual machine.
+az vm create \
+    --resource-group $rg \
+    --name $vm_workload \
+    --location $location \
+    --image Win2022AzureEditionCore \
+    --size Standard_D2ds_v6 \
+    --nics $nic_workload \
+    --admin-username pietronromano \
+    --admin-password Axml-xsl0123
+
+az vm auto-shutdown -g $rg -n $vm_workload --time 1900 --email "pietronromano@live.com" 
+
+
+# Now deploy the firewall into the virtual network.
+az network firewall create \
+    --name $fw \
+    --resource-group $rg \
+    --location $location
+
+az network public-ip create \
+    --name $pip_fw \
+    --resource-group $rg \
+    --location $location \
+    --allocation-method static \
+    --sku standard
+
+az network firewall ip-config create \
+    --firewall-name $fw \
+    --name $fw_ip_config \
+    --public-ip-address $pip_fw \
+    --resource-group $rg \
+    --vnet-name $vnet
+
+az network firewall update \
+    --name $fw \
+    --resource-group $rg
+
+fw_pub_addr="$(az network public-ip show \
+    --name $pip_fw \
+    --resource-group $rg \
+    --query 'ipAddress' \
+    --output tsv)"
+echo $fw_pub_addr
+
+fw_priv_addr="$(az network firewall ip-config list -g $rg -f $fw --query "[?name=='$fw_ip_config'].privateIpAddress" --output tsv)"
+echo $fw_priv_addr
+
+# Create a default route
+## Create a route table, with BGP route propagation disabled
+az network route-table create \
+    --name $fw_rt_table \
+    --resource-group $rg \
+    --location $location \
+    --disable-bgp-route-propagation true
+
+# Create the route to the Firewall private address
+az network route-table route create \
+  --resource-group $rg \
+  --name $fw_rt_route \
+  --route-table-name $fw_rt_table \
+  --address-prefix 0.0.0.0/0 \
+  --next-hop-type VirtualAppliance \
+  --next-hop-ip-address $fw_priv_addr
+
+# Associate the route table to the workload subnet
+az network vnet subnet update \
+    -n $subnet_workload \
+    -g $rg \
+    --vnet-name $vnet \
+    --address-prefixes 10.0.2.0/24 \
+    --route-table $fw_rt_table
+
+# Configure an application rule
+## The application rule allows outbound access to www.microsoft.com.
+az network firewall application-rule create \
+   --collection-name $fw_app_rule \
+   --firewall-name $fw \
+   --name Allow-Microsoft \
+   --protocols Http=80 Https=443 \
+   --resource-group $rg \
+   --target-fqdns www.microsoft.com \
+   --source-addresses 10.0.2.0/24 \
+   --priority 200 \
+   --action Allow
+
+# Azure Firewall includes a built-in rule collection for infrastructure FQDNs that are allowed by default. 
+## These FQDNs are specific for the platform and can't be used for other purposes. For more information, see Infrastructure FQDNs.
+
+## Configure a network rule: The network rule allows outbound access to two public DNS IP addresses of your choosing at port 53 (DNS).
+az network firewall network-rule create \
+   --collection-name $fw_app_rule \
+   --destination-addresses 209.244.0.3 209.244.0.4 \
+   --destination-ports 53 \
+   --firewall-name $fw \
+   --name Allow-DNS \
+   --protocols UDP \
+   --resource-group $rg \
+   --priority 200 \
+   --source-addresses 10.0.2.0/24 \
+   --action Allow
+
+# Test the firewall
+## Note the private IP address for the workload virtual machine:
+az vm list-ip-addresses \
+-g $rg \
+-n $vm_workload \
+--query "[].virtualMachine.network.privateIpAddresses[0]" \
+--output tsv
+
+# Connect a remote desktop to jump virtual machine, and sign in. From there, open a remote desktop connection to the vm_workload private IP address and sign in.
+# On SRV-Work, open a PowerShell window and run the following commands:
+
+nslookup www.google.com
+nslookup www.microsoft.com
+## Both commands should return answers, showing that your DNS queries are getting through the firewall.
+
+Invoke-WebRequest -Uri https://www.microsoft.com -UseBasicParsing
+Invoke-WebRequest -Uri https://www.google.com -UseBasicParsing
+# The www.microsoft.com requests should succeed, and the other External Website requests should fail. This demonstrates that your firewall rules are operating as expected.

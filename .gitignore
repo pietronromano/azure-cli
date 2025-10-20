@@ -1,0 +1,9 @@
+# Any compiled folders, at any level
+bin/
+obj/
+
+# Any .json
+*.json
+
+# Private key
+id_rsa

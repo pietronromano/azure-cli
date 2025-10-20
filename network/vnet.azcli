@@ -1,0 +1,39 @@
+
+# Resource group
+rg="rg-eus"
+rg="rg-neu"
+rg="rg-sea"
+
+location="eastus2"
+location="northeurope"
+location="southeastasia"
+
+az group create --name $rg --location $location
+
+# vnet
+vnet="vnet-eus"
+vnet="vnet-neu"
+vnet="vnet-sea"
+
+# 10.3.0.0/16 10.1.0.0/16 10.2.0.0/16 \
+# 10.3.1.0/24 10.1.1.0/24 10.2.1.0/24
+az network vnet create \
+    --name $vnet \
+    --resource-group $rg \
+    --address-prefix 10.1.0.0/16 \
+    --subnet-name "front-tier" \
+    --subnet-prefixes 10.1.1.0/24
+
+# 10.3.2.0/24 10.1.2.0/24 10.2.2.0/24
+az network vnet subnet create \
+    --name "middle-tier" \
+    --resource-group $rg \
+    --vnet-name $vnet \
+    --address-prefixes 10.1.2.0/24
+
+# 10.3.3.0/24 10.1.3.0/24 10.2.3.0/24
+az network vnet subnet create \
+    --name "back-tier" \
+    --resource-group $rg \
+    --vnet-name $vnet \
+    --address-prefixes 10.1.3.0/24

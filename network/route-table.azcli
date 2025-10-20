@@ -1,0 +1,155 @@
+# SOURCE: https://learn.microsoft.com/en-us/azure/virtual-network/tutorial-create-route-table?tabs=cli
+## FOR THE BASTION PART, SEE bastion.azcli 
+# DATE: 18-08-2025
+# RESULTS: WORKED FINE!
+
+# Variables
+rg="rg-rt"
+location="northeurope"
+vnet="vnet-rt"
+subnet_public="subnet-public"
+subnet_private="subnet-private"
+subnet_dmz="subnet-dmz"
+username="pietronromano"
+vm_nva="vm-nva"
+vm_public="vm-public"
+vm_private="vm-private"
+
+vm_nva_nic="vm-nvaVMNic"
+route_table="route-table-public"
+
+
+# Create a resource group.
+az group create \
+    --name $rg \
+    --location $location
+
+# Create a virtual network with one subnet with az network vnet create.
+az network vnet create \
+    --name $vnet \
+    --resource-group $rg \
+    --address-prefix 10.0.0.0/16 \
+    --subnet-name $subnet_default \
+    --subnet-prefix 10.0.0.0/24
+
+
+# Create two more subnets with az network vnet subnet create.
+## Create a bastion subnet.
+az network vnet subnet create \
+    --vnet-name $vnet \
+    --resource-group $rg \
+    --name AzureBastionSubnet \
+    --address-prefix 10.0.1.0/24
+
+## Create a private subnet.
+az network vnet subnet create \
+    --vnet-name $vnet \
+    --resource-group $rg \
+    --name $subnet_private \
+    --address-prefix 10.0.2.0/24
+ 
+# Create a DMZ subnet.
+az network vnet subnet create \
+    --vnet-name $vnet \
+    --resource-group $rg \
+    --name $subnet_dmz \
+    --address-prefix 10.0.3.0/24
+
+# Create Azure Bastion: see bastion.azcli
+
+
+# Create VMs
+## VM NVA
+az vm create \
+    --resource-group $rg \
+    --name $vm_nva \
+    --image Ubuntu2404 \
+    --size Standard_D2ds_v6 \
+    --admin-username $username \
+    --generate-ssh-keys \
+    --vnet-name $vnet \
+    --subnet $subnet_dmz
+
+az vm auto-shutdown -g $rg -n $vm_nva --time 1730 --email "pietronromano@live.com" 
+
+## VM public
+az vm create \
+    --resource-group $rg \
+    --name $vm_public \
+    --image Ubuntu2404 \
+    --size Standard_D2ds_v6 \
+    --admin-username $username \
+    --generate-ssh-keys \
+    --vnet-name $vnet \
+    --subnet $subnet_public \
+    --no-wait
+
+az vm auto-shutdown -g $rg -n $vm_nva --time 1730 --email "pietronromano@live.com" 
+
+## VM private
+az vm create \
+    --resource-group $rg \
+    --name $vm_private \
+    --image Ubuntu2404 \
+    --size Standard_D2ds_v6 \
+    --admin-username $username \
+    --generate-ssh-keys \
+    --vnet-name $vnet \
+    --subnet $subnet_private
+
+az vm auto-shutdown -g $rg -n $vm_nva --time 1730 --email "pietronromano@live.com" 
+
+
+# Enable IP forwarding on the NVA
+az network nic update \
+    --name $vm_nva_nic \
+    --resource-group $rg \
+    --ip-forwarding true
+
+# Enable IP forwarding in the operating system
+## Connect via bastion
+## Enter the following information at the prompt of the virtual machine to enable IP forwarding:
+sudo vim /etc/sysctl.conf
+
+## In the Vim editor, remove the # from the line net.ipv4.ip_forward=1:
+ - Press the Insert key.
+
+## Uncomment the next line to enable packet forwarding for IPv4
+net.ipv4.ip_forward=1
+
+ - Press the Esc key.
+ - Enter :wq and press Enter.
+ - Close the Bastion session.
+ - Restart the virtual machine.
+
+
+# Create a route table
+az network route-table create \
+    --resource-group $rg \
+    --name $route_table
+
+
+## Create a route in the route table with az network route-table route create.
+az network route-table route create \
+    --name to-private-subnet \
+    --resource-group $rg \
+    --route-table-name $route_table \
+    --address-prefix 10.0.2.0/24 \
+    --next-hop-type VirtualAppliance \
+    --next-hop-ip-address 10.0.3.4
+
+## Associate the route-table-subnet-public route table to the subnet-public subnet with az network vnet subnet update.
+az network vnet subnet update \
+    --vnet-name $vnet \
+    --name $subnet_public \
+    --resource-group $rg \
+    --route-table $route_table
+
+
+# Test the routing of network traffic
+ - Test routing of network traffic from vm-public to vm-private. Test routing of network traffic from vm-private to vm-public.
+ - Test network traffic from vm-public to vm-private
+
+## Connect via Bastion to vm-public
+## In the prompt, enter the following command to trace the routing of network traffic from vm-public to vm-private:
+tracepath vm-private

@@ -1,0 +1,54 @@
+# SOURCE: https://learn.microsoft.com/en-us/azure/network-watcher/vnet-flow-logs-manage?tabs=cli
+# DATE: 16-07-2025
+# RESULTS: OK, worked fine
+
+# Variables
+rg="rg-neu"
+location="northeurope"
+vnet="vnet-neu"
+subnet="front-tier"
+nsg="nsg-front-tier"
+law="law-neu"
+sa="pnrsaneu"
+sacontainer="flowlogs"
+flowlog=$vnet"-flowlog-1"
+
+# Register Microsoft.Insights provider.
+## Microsoft.Insights provider must be registered to successfully log traffic in a virtual network.
+az provider register --namespace Microsoft.Insights
+
+# Create a Storage account
+az storage account create \
+  --name $sa \
+  --resource-group $rg \
+  --sku Standard_LRS \
+  --kind StorageV2
+
+## Container
+az storage container create \
+  --name $sacontainer \
+  --account-name $sa
+
+
+# Enable virtual network flow logs and traffic analytics
+## Create a traffic analytics workspace.
+az monitor log-analytics workspace create --name $law --resource-group $rg --location $location
+
+## Create a VNet flow log.
+az network watcher flow-log create \
+    --location $location \
+    --name $flowlog \
+    --resource-group $rg \
+    --vnet $vnet \
+    --storage-account $sa \
+    --traffic-analytics true \
+    --workspace $law \
+    --interval 10
+
+
+# Use az network watcher flow-log list command to list all flow log resources in a particular region in your subscription.
+az network watcher flow-log list --location $location --out table
+
+
+# View details of a flow log resource
+az network watcher flow-log show --name $flowlog --resource-group $rg --location $location

@@ -1,0 +1,175 @@
+# SOURCE: https://learn.microsoft.com/en-us/azure/web-application-firewall/ag/tutorial-restrict-web-traffic-cli
+# DATE: 22-07-2025
+# RESULTS: WORKED FINE! 
+
+# Variables
+rg="rg-waf"
+location="northeurope"
+vnet="vnet-waf"
+sbn_backend="sbn-backend"
+sbn_appgw="sbn-appgateway"
+pip_appgw="pip-appgateway"
+vm_video="vm-video"
+vm_images="vm-images"
+appgw="appgateway-01"
+appgw_backend_pool="backend-01"
+appgw_policy="policy-01"
+storacc="pnrwafnesa1"
+
+
+# Create Resource Group
+az group create --name $rg --location $location
+
+# vnet
+az network vnet create \
+  --name $vnet \
+  --resource-group $rg \
+  --location $location \
+  --address-prefix 10.0.0.0/16 \
+  --subnet-name $sbn_backend \
+  --subnet-prefix 10.0.1.0/24
+
+az network vnet subnet create \
+  --name $sbn_appgw \
+  --resource-group $rg \
+  --vnet-name $vnet \
+  --address-prefix 10.0.2.0/24
+
+az network public-ip create \
+  --resource-group $rg \
+  --name $pip_appgw \
+  --allocation-method Static \
+  --sku Standard
+
+
+# VMs: 
+## NOTE: must execute this command from the SAME folder as the cloud-init: otherwise won't be included and no warning is given
+cd /Users/macbookpro/dev/azure/azcli/network/appgw
+cloud_init="cloud-init.txt"
+cat $cloud_init
+# vm_video
+az vm create \
+--resource-group $rg \
+--name $vm_video \
+--image Ubuntu2404 \
+--size Standard_D2ds_v6 \
+--admin-username pietronromano \
+--custom-data $cloud_init \
+--generate-ssh-keys \
+--vnet-name $vnet \
+--subnet $sbn_backend
+
+# Open port 80 (default-allow-ssh 22 is created by default)
+az vm open-port --port 80 --resource-group $rg --name $vm_video --priority 200
+
+az vm auto-shutdown -g $rg -n $vm_video --time 1730 --email "pietronromano@live.com" 
+# Use JMESPath query
+vm_video_private_ip=$(az vm list-ip-addresses -g $rg -n $vm_video  --query "[].virtualMachine.network.privateIpAddresses[0]" --output tsv)
+echo $vm_video_private_ip
+
+vm_video_public_ip=$(az vm show --show-details --resource-group $rg --name $vm_video --query publicIps --output tsv)
+echo $vm_video_public_ip
+curl $vm_video_public_ip
+
+# login
+ssh -i ~/.ssh/id_rsa pietronromano@$vm_video_public_ip
+# Debug the clout-init logs:
+less /var/log/cloud-init-output.log
+
+
+## vm_images
+az vm create \
+--resource-group $rg \
+--name $vm_images \
+--image Ubuntu2404 \
+--size Standard_D2ds_v6 \
+--admin-username pietronromano \
+--generate-ssh-keys \
+--vnet-name $vnet \
+--subnet $sbn_backend \
+--custom-data $cloud_init
+
+# Open port 80 (default-allow-ssh 22 is created by default)
+az vm open-port --port 80 --resource-group $rg --name $vm_images --priority 200
+az vm auto-shutdown -g $rg -n $vm_images --time 1730 --email "pietronromano@live.com" 
+# Use JMESPath query
+vm_images_private_ip=$(az vm list-ip-addresses -g $rg -n $vm_images  --query "[].virtualMachine.network.privateIpAddresses[0]" --output tsv)
+echo $vm_images_private_ip
+
+vm_images_public_ip=$(az vm show --show-details --resource-group $rg --name $vm_images --query publicIps --output tsv)
+echo $vm_images_public_ip
+curl $vm_images_public_ip
+ssh -i ~/.ssh/id_rsa pietronromano@$vm_images_public_ip
+curl http://localhost/images/test.html
+
+## Debug the clout-init logs:
+less /var/log/cloud-init-output.log
+grep "nginx" /var/log/cloud-init-output.log
+
+# Application Gateway with WAF
+az network application-gateway waf-policy create \
+  --name $appgw_policy \
+  --resource-group $rg \
+  --type OWASP \
+  --version 3.2
+
+# Creates a default, empty appGatewayBackendPool, default appGatewayHttpListener
+az network application-gateway create \
+  --name $appgw \
+  --location $location \
+  --resource-group $rg \
+  --vnet-name $vnet \
+  --subnet $sbn_appgw \
+  --capacity 2 \
+  --sku WAF_v2 \
+  --http-settings-cookie-based-affinity Disabled \
+  --frontend-port 80 \
+  --http-settings-port 80 \
+  --http-settings-protocol Http \
+  --public-ip-address $pip_appgw \
+  --waf-policy $appgw_policy \
+  --priority 1
+
+## Update backend poolwith VM IPs
+az network application-gateway address-pool update \
+    --gateway-name $appgw \
+    --name appGatewayBackendPool \
+    --resource-group $rg \
+    --no-wait true \
+    --servers $vm_images_private_ip $vm_video_private_ip
+
+# Storage account
+az storage account create \
+  --name $storacc \
+  --resource-group $rg \
+  --location $location \
+  --sku Standard_LRS \
+  --encryption-services blob
+
+
+pip_appgw_address=$(az network public-ip show \
+  --resource-group $rg \
+  --name $pip_appgw \
+  --query ipAddress \
+  --output tsv)
+
+# WORKED FINE! ALTERNATES BETWEEN vm_images and vm_video: 
+curl $pip_appgw_address
+curl $pip_appgw_address/images/test.html
+curl $pip_appgw_address/video/test.html
+
+
+----------------------------
+# DON'T DO: THIS IS DEPRECATED: (BadRequest) Diagnostic settings does not support retention for new diagnostic settings.
+# Configure diagnostics to record data into the ApplicationGatewayAccessLog, ApplicationGatewayPerformanceLog, and ApplicationGatewayFirewallLog logs. 
+# ?? Replace <subscriptionId> with your subscription identifier and then configure diagnostics with az monitor diagnostic-settings create.
+appgwid=$(az network application-gateway show --name $appgw --resource-group $rg --query id -o tsv)
+
+storeid=$(az storage account show --name $storacc --resource-group $rg --query id -o tsv)
+
+az monitor diagnostic-settings create --name appgwdiag --resource $appgwid \
+  --logs '[ { "category": "ApplicationGatewayAccessLog", "enabled": true, "retentionPolicy": { "days": 30, "enabled": true } }, { "category": "ApplicationGatewayPerformanceLog", "enabled": true, "retentionPolicy": { "days": 30, "enabled": true } }, { "category": "ApplicationGatewayFirewallLog", "enabled": true, "retentionPolicy": { "days": 30, "enabled": true } } ]' \
+  --storage-account $storeid
+
+
+

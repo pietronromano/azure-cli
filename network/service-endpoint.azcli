@@ -1,0 +1,204 @@
+
+# SOURCE: https://learn.microsoft.com/en-us/azure/virtual-network/virtual-network-service-endpoint-policies?tabs=cli
+# DATE: 14-07-2025
+# RESULTS: OK, worked fine
+
+# Variables
+rg="rg-neu"
+location="northeurope"
+vnet="vnet-neu"
+subnet="front-tier"
+nsg="nsg-front-tier"
+storage1="pnrsneu1"
+storage2="pnrsneu12"
+
+# Creat a service endpoint for Microsoft.Storage subnet:
+az network vnet subnet create \
+  --vnet-name $vnet \
+  --resource-group $rg \
+  --name $subnet \
+  --address-prefix 10.1.1.0/24 \
+  --service-endpoints Microsoft.Storage
+
+# Create a network security group with az network nsg create
+az network nsg create \
+  --resource-group $rg \
+  --location $location \
+  --name $nsg
+
+# Associate the network security group to the subnet with az network vnet subnet update:
+az network vnet subnet update \
+  --vnet-name $vnet \
+  --name $subnet \
+  --resource-group $rg \
+  --network-security-group $nsg
+
+# Create security rules with az network nsg rule create. The rule that follows allows outbound access to the public IP addresses assigned to the Azure Storage service:
+
+az network nsg rule create \
+  --resource-group $rg \
+  --nsg-name $nsg \
+  --name Allow-Storage-All \
+  --access Allow \
+  --protocol "*" \
+  --direction Outbound \
+  --priority 100 \
+  --source-address-prefix "VirtualNetwork" \
+  --source-port-range "*" \
+  --destination-address-prefix "Storage" \
+  --destination-port-range "*"
+
+# The rule that follows overrides a default security rule that allows outbound access to all public IP addresses. 
+# The destination-address-prefix "Internet" option denies outbound access to all public IP addresses. 
+# The previous rule overrides this rule, due to its higher priority, which allows access to the public IP addresses of Azure Storage.
+
+az network nsg rule create \
+  --resource-group  $rg \
+  --nsg-name $nsg \
+  --name Deny-Internet-All \
+  --access Deny \
+  --protocol "*" \
+  --direction Outbound \
+  --priority 110 \
+  --source-address-prefix "VirtualNetwork" \
+  --source-port-range "*" \
+  --destination-address-prefix "Internet" \
+  --destination-port-range "*"
+
+
+# Create two Azure storage accounts with az storage account create.
+storageAcctName1="pnrallowedaccount"
+
+az storage account create \
+  --name $storageAcctName1 \
+  --resource-group $rg \
+  --sku Standard_LRS \
+  --kind StorageV2
+
+## Use the same command to create the denied Azure storage account, but change the name to deniedaccount.
+storageAcctName2="pnrdeniedaccount"
+
+az storage account create \
+  --name $storageAcctName2 \
+  --resource-group $rg \
+  --sku Standard_LRS \
+  --kind StorageV2
+
+# Create file shares
+# Create allowed storage account file share
+
+# Retrieve the connection string for the storage accounts into a variable with az storage account show-connection-string.
+saConnectionString1=$(az storage account show-connection-string \
+  --name $storageAcctName1 \
+  --resource-group $rg \
+  --query 'connectionString' \
+  --out tsv)
+echo $saConnectionString1
+
+# Create a file share in the storage account with az storage share create. In a later step, this file share is mounted to confirm network access to it.
+az storage share create \
+  --name file-share \
+  --quota 2048 \
+  --connection-string $saConnectionString1 > /dev/null
+
+
+# Create denied storage account file share
+# Retrieve the connection string for the storage accounts into a variable with az storage account show-connection-string. The connection string is used to create a file share in a later step.
+saConnectionString2=$(az storage account show-connection-string \
+  --name $storageAcctName2 \
+  --resource-group $rg \
+  --query 'connectionString' \
+  --out tsv)
+echo $saConnectionString2
+
+# Create a file share in the storage account with az storage share create. In a later step, this file share is mounted to confirm network access to it.
+az storage share create \
+  --name file-share \
+  --quota 2048 \
+  --connection-string $saConnectionString2 > /dev/null
+
+# To limit access to selected networks, change the default action to Deny with az storage account update. 
+# Once network access is denied, the storage account isn't accessible from any network.
+az storage account update \
+  --name $storageAcctName1 \
+  --resource-group $rg \
+  --default-action Deny
+
+az storage account update \
+  --name $storageAcctName2 \
+  --resource-group $rg \
+  --default-action Deny
+
+
+# Allow network access to the storage account from the subnet with az storage account network-rule add.
+az storage account network-rule add \
+  --resource-group $rg \
+  --account-name $storageAcctName1 \
+  --vnet-name $vnet \
+  --subnet $subnet
+
+az storage account network-rule add \
+  --resource-group $rg \
+  --account-name $storageAcctName2 \
+  --vnet-name $vnet \
+  --subnet $subnet
+
+
+# Use az storage account show to get the resource ID for the storage account that is allowed.
+serviceResourceId=$(az storage account show --name $storageAcctName1 --query id --output tsv)
+echo $serviceResourceId
+
+# Create a service endpoint policy
+az network service-endpoint policy create \
+  --resource-group $rg \
+  --name service-endpoint-policy \
+  --location $location
+
+
+# Create and add a policy definition for allowing the previous Azure Storage account to the service endpoint policy
+az network service-endpoint policy-definition create \
+  --resource-group $rg \
+  --policy-name service-endpoint-policy \
+  --name policy-definition \
+  --service "Microsoft.Storage" \
+  --service-resources $serviceResourceId
+
+# Use az network vnet subnet update to associate the service endpoint policy to the subnet.
+az network vnet subnet update \
+  --vnet-name $vnet \
+  --resource-group $rg \
+  --name $subnet \
+  --service-endpoints Microsoft.Storage \
+  --service-endpoint-policy service-endpoint-policy
+
+# To test network access to a storage account, deploy a VM in the subnet.
+# NOTE: Capacity Restrictions: Standard_DS1_v2
+az vm create \
+  --resource-group $rg \
+  --name vmtestpe \
+  --image Win2022Datacenter \
+  --size Standard_D2ds_v6 \
+  --admin-username pietronromano \
+  --admin-password Axml-xsl0123 \
+  --vnet-name $vnet \
+  --subnet $subnet
+
+
+# Go to VM, Run Command
+
+## Enter the storage account key for the allowed storage account that you recorded earlier.
+$storageAcctKey1 = ""
+$acctKey = ConvertTo-SecureString -String $storageAcctKey1 -AsPlainText -Force
+## Replace the login account with the name of the storage account you created.
+$credential = New-Object System.Management.Automation.PSCredential -ArgumentList ("Azure\pnrallowedaccount"), $acctKey
+## Replace the storage account name with the name of the storage account you created.
+New-PSDrive -Name Z -PSProvider FileSystem -Root "\\pnrallowedaccount.file.core.windows.net\file-share" -Credential $credential
+
+
+## Enter the storage account key for the denied storage account that you recorded earlier.
+$storageAcctKey2 = ""
+$acctKey = ConvertTo-SecureString -String $storageAcctKey2 -AsPlainText -Force
+## Replace the login account with the name of the storage account you created.
+$credential = New-Object System.Management.Automation.PSCredential -ArgumentList ("Azure\pnrdeniedaccount"), $acctKey
+## Replace the storage account name with the name of the storage account you created.
+New-PSDrive -Name Y -PSProvider FileSystem -Root "\\pnrdeniedaccount.file.core.windows.net\file-share" -Credential $credential

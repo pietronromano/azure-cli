@@ -1,0 +1,225 @@
+
+# SOURCES:
+    - Based on below, but I used port 80 in the VMs with IIS
+    - Basic: https://learn.microsoft.com/en-us/azure/application-gateway/quick-create-cli
+    - Routing: https://learn.microsoft.com/en-us/azure/application-gateway/tutorial-url-route-cli
+# DATE: 25/08/2025
+# RESULTS: WORKED GREAT
+
+# Variables
+rg="rg-appgw"
+location="northeurope"
+vnet="vnet-appgw"
+username="pietronromano"
+subnet_appgw="subnet-appgateway"
+cidrs=("10.0.1.0" "10.0.2.0")
+backends=("images" "video")
+
+pip_appgw="pip-appgateway"
+appgw="appgateway-01"
+appgw_pathmap="pathmap-backends"
+appgw_routing_rule="rule-pathmap-to-backends"
+
+# Create a resource group.
+az group create \
+    --name $rg \
+    --location $location
+
+# Create a virtual network with one subnet for the appgw
+az network vnet create \
+    --name $vnet \
+    --resource-group $rg \
+    --address-prefix 10.0.0.0/16 \
+    --subnet-name $subnet_appgw \
+    --subnet-prefix 10.0.0.0/24
+
+
+# NOTE: NEEDS bash, not zsh: note the ! to take the index, not the value
+for i in ${!backends[@]}; do
+  # echo "element $i is ${backends[$i]}"
+  az network vnet subnet create \
+    --vnet-name $vnet \
+    --resource-group $rg \
+    --name "subnet-"${backends[$i]} \
+    --address-prefix ${cidrs[$i]}"/24"
+done
+
+# Create VMs
+## NOTE: must execute this command from the SAME folder as the cloud-init: otherwise won't be included and no warning is given
+cd /Users/macbookpro/dev/azure/azcli/network/appgw
+cloud_init="cloud-init.txt"
+cat $cloud_init
+
+##  OPTION 1: Ubuntu
+for backend in "${backends[@]}"; do
+    az vm create \
+        --resource-group $rg \
+        --name "vm-"$backend \
+        --image Ubuntu2404 \
+        --size Standard_D2ds_v6 \
+        --admin-username $username \
+        --generate-ssh-keys \
+        --vnet-name $vnet \
+        --subnet "subnet-"$backend \
+        --custom-data $cloud_init
+
+    az vm open-port --resource-group $rg --name $"vm-"$backend --port 80 
+    az vm auto-shutdown --resource-group $rg --name $"vm-"$backend --time 1730 --email "pietronromano@live.com" 
+done
+
+## OPTION 2: Windows (for using wireshark)
+for backend in "${backends[@]}"; do
+    az vm create \
+        --resource-group $rg \
+        --name "vm-"$backend \
+        --image Win2022Datacenter \
+        --size Standard_D2ds_v6 \
+        --admin-username $username \
+        --admin-password Axml-xsl0123 \
+        --vnet-name $vnet \
+        --subnet "subnet-"$backend
+
+    az vm auto-shutdown -g $rg -n "vm-"$backend --time 1730 --email "pietronromano@live.com"
+    az vm open-port --resource-group $rg --name "vm-"$backend --port 80
+
+    az vm run-command invoke -g $rg \
+        --name "vm-"$backend \
+        --command-id RunPowerShellScript \
+        --scripts "Install-WindowsFeature -name Web-Server -IncludeManagementTools"
+done
+
+# Test IIS: 
+## index.html: to show servername easily, manually update IIS default pages in sub-directory
+    -  C:\inetpub\wwwroot\images|video\index.html: "<h1>Hello from: Images|Video VM </h1>")
+## Wireshark: use the x64 Installer, all default options
+for backend in "${backends[@]}"; do
+    vm_ip=$(az vm show --show-details --resource-group $rg --name $"vm-"$backend --query publicIps --output tsv)
+    printf $"vm-"$backend" ip: "$vm_ip"\n"
+    curl $vm_ip
+    printf "\n...\n"
+    curl $vm_ip"/"$backend"/index.html"
+    printf "\n...\n"
+done 
+
+
+# AppGW
+az network public-ip create \
+  --resource-group $rg \
+  --location $location \
+  --name $pip_appgw \
+  --allocation-method Static \
+  --sku Standard
+
+# Creates a default, empty appGatewayBackendPool, default appGatewayHttpListener, appGatewayBackendHttpSettings
+az network application-gateway create \
+  --name $appgw \
+  --location $location \
+  --resource-group $rg \
+  --vnet-name $vnet \
+  --subnet $subnet_appgw \
+  --capacity 1 \
+  --sku Standard_v2 \
+  --http-settings-cookie-based-affinity Disabled \
+  --frontend-port 80 \
+  --http-settings-port 80 \
+  --http-settings-protocol Http \
+  --public-ip-address $pip_appgw \
+  --priority 1
+
+
+# Add backend pools, linked to servers, but no rules yet
+for backend in "${backends[@]}"; do
+    vm_ip=$(az vm show --show-details --resource-group $rg --name $"vm-"$backend --query publicIps --output tsv)
+    
+    az network application-gateway address-pool create \
+        --gateway-name $appgw \
+        --resource-group $rg \
+        --name $"backend-pool-"$backend \
+        --servers $vm_ip
+done 
+
+# Add a URL path map
+## URL path maps ensure that specific URLs are routed to specific backend pools
+## Create pathmap, with first rule for images
+## Path based rules show as "Backend Targets", below the default address pool
+az network application-gateway url-path-map create \
+  --gateway-name $appgw \
+  --name $appgw_pathmap \
+  --paths /images/* \
+  --resource-group $rg \
+  --address-pool "backend-pool-images" \
+  --default-address-pool appGatewayBackendPool \
+  --default-http-settings appGatewayBackendHttpSettings \
+  --http-settings appGatewayBackendHttpSettings \
+  --rule-name imagePathRule
+
+## Add second rule to pathmap
+az network application-gateway url-path-map rule create \
+  --gateway-name $appgw \
+  --name videoPathRule \
+  --resource-group $rg \
+  --path-map-name $appgw_pathmap \
+  --paths /video/* \
+  --address-pool "backend-pool-video" \
+  --http-settings appGatewayBackendHttpSettings
+
+# Add a routing rule: associates the URL maps with the listener that we created
+    # NOTE: appGatewayBackendPool is the default, but the path-map rules will override it
+
+# NOTE: 
+- We need to update this default rule, because it's associated to appGatewayHttpListener
+- Two Request Routing Rules of Application Gateway can't use the same listener
+az network application-gateway rule update \
+    --gateway-name $appgw \
+    --name "rule1" \
+    --resource-group $rg \
+    --rule-type PathBasedRouting \
+    --url-path-map $appgw_pathmap \
+    --address-pool appGatewayBackendPool \
+    --priority 200
+
+
+# AppGW public ip
+pip_appgw_ip=$(az network public-ip show \
+  --resource-group $rg \
+  --name $pip_appgw \
+  --query ipAddress \
+  --output tsv)
+
+## Going through AppGW, Wireshark on VM shows origin IP as AppGW public IP
+    ## Test routing through AppGW, using /images/ and /video/
+for backend in "${backends[@]}"; do
+    url=$pip_appgw_ip"/"$backend"/index.html"
+    printf "url: "$url"\n"
+    curl $url
+    printf "\n...\n"
+done
+
+## OBVIOUSLY: going straight to VM, Wireshark on VM shows origin IP as this PC
+for backend in "${backends[@]}"; do
+    vm_ip=$(az vm show --show-details --resource-group $rg --name $"vm-"$backend --query publicIps --output tsv)
+    url=$vm_ip"/"$backend"/index.html"
+    printf "url: "$url"\n"
+    curl $url
+    printf "\n"
+done 
+
+####################################
+# NOT NEEDED IN MY TESTS: I USED port 80 in the VMs with IIS
+# Create the frontend-port (just one, shared, for both backends)
+## NOTE: frontendPorts don't show in portal, only in the JSON
+appgw_frontend_port="frontend-port-8080"
+
+az network application-gateway frontend-port create \
+    --resource-group $rg \
+    --gateway-name $appgw \
+    --port 8080 \
+    --name $appgw_frontend_port  
+
+# Create the backend listener, linked to frontend port
+az network application-gateway http-listener create \
+  --resource-group $rg \
+  --gateway-name $appgw \
+  --name $appgw_listener \
+  --frontend-ip appGatewayFrontendIP \
+  --frontend-port $appgw_frontend_port 

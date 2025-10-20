@@ -1,0 +1,12 @@
+# Login to  my tenant avoiding work tenant 
+az login --tenant pietronromanolive.onmicrosoft.com 
+
+# Set a specific Subscription
+az account set -s ...
+
+# See the full list of available regions 
+az account list-locations -o table
+ 
+# Set / list local defaults
+az configure --defaults group=myRG web=myweb vm=myvm
+az configure --defaults --list-defaults -l

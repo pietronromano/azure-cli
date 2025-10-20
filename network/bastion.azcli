@@ -1,0 +1,39 @@
+# SOURCE: https://learn.microsoft.com/en-us/azure/load-balancer/quickstart-load-balancer-standard-internal-cli
+## JUST THE BASTION PART, SEE alb.azcli for the rest
+# DATE: 11-08-2025
+# RESULTS: WORKED FINE! 
+
+# Variables
+rg="rg-alb"
+location="northeurope"
+vnet="vnet-1"
+subnet="subnet-backend"
+bastion_host="bastion-1"
+bastion_pip="pip-bastion"
+
+# Create a bastion public IP address
+az network public-ip create \
+    --resource-group $rg  \
+    --name $bastion_pip \
+    --sku Standard \
+    --zone 1 2 3
+
+# Create a bastion subnet
+az network vnet subnet create \
+    --resource-group $rg  \
+    --name AzureBastionSubnet \
+    --vnet-name $vnet \
+    --address-prefixes 10.1.2.0/27
+
+# Create the bastion host: It can take a few minutes for the Azure Bastion host to deploy.
+az config set extension.use_dynamic_install=yes_without_prompt
+
+az network bastion create \
+    --resource-group $rg  \
+    --name $bastion_host \
+    --public-ip-address $bastion_pip \
+    --vnet-name $vnet \
+    --location $location
+
+
+

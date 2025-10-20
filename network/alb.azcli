@@ -1,0 +1,222 @@
+# SOURCE: https://learn.microsoft.com/en-us/azure/load-balancer/quickstart-load-balancer-standard-internal-cli
+## FOR THE BASTION PART, SEE bastion.azcli 
+# DATE: 11-08-2025
+# RESULTS: WORKED FINE! 
+
+# Variables
+rg="rg-alb"
+location="northeurope"
+vnet="vnet-1"
+subnet="subnet-backend"
+
+nsg="nsg-backend"
+nsg_http_rule="nsg-http_rule"
+
+alb="alb-1"
+alb_backend_pool="backend-pool-1"
+alb_frontend_ip="frontend-ip-1"
+alb_health_probe="health-probe-1"
+alb_http_rule="http-rule-1"
+
+nic_vm1="nic-vm-1"
+nic_vm2="nic-vm-2"
+nic_prefix="nic-vm-"
+
+vm_prefix="vm-"
+vm_username="pietronromano"
+vm_pwd="Axml-xsl0123"
+
+natgw="nat-gateway-1"
+natgw_pip="pip_nat"
+
+vm_test="vm-test"
+vm_test_nic="nic-vm-test"
+
+# Create RG
+az group create --name $rg --location $location
+
+
+#VNet
+az network vnet create \
+  --name $vnet \
+  --resource-group $rg \
+  --location $location \
+  --address-prefix 10.1.0.0/16 \
+  --subnet-name $subnet \
+  --subnet-prefixes 10.1.1.0/24
+
+
+# Create an internal load balancer with az network lb create.
+az network lb create \
+    --resource-group $rg \
+    --name $alb \
+    --sku Standard \
+    --vnet-name $vnet \
+    --subnet $subnet \
+    --backend-pool-name $alb_backend_pool \
+    --frontend-ip-name $alb_frontend_ip
+
+
+## ALB Health Probe
+az network lb probe create \
+    --resource-group $rg \
+    --lb-name $alb \
+    --name $alb_health_probe \
+    --protocol tcp \
+    --port 80
+
+## ALB Rule
+ az network lb rule create \
+    --resource-group $rg \
+    --lb-name $alb \
+    --name $alb_http_rule \
+    --protocol tcp \
+    --frontend-port 80 \
+    --backend-port 80 \
+    --frontend-ip-name $alb_frontend_ip \
+    --backend-pool-name $alb_backend_pool \
+    --probe-name $alb_health_probe \
+    --idle-timeout 15 \
+    --enable-tcp-reset true
+
+
+## Create a network security group
+### For a standard load balancer, the VMs in the backend pool are required to have network interfaces that belong to a network security group.
+az network nsg create \
+    --resource-group $rg \
+    --name $nsg
+
+### Create a network security group rule
+az network nsg rule create \
+    --resource-group $rg \
+    --nsg-name $nsg \
+    --name $nsg_http_rule \
+    --protocol '*' \
+    --direction inbound \
+    --source-address-prefix '*' \
+    --source-port-range '*' \
+    --destination-address-prefix '*' \
+    --destination-port-range 80 \
+    --access allow \
+    --priority 200
+
+
+# NICs
+array=($nic_vm1 $nic_vm2)
+for vmnic in "${array[@]}"
+do
+az network nic create \
+    --resource-group $rg \
+    --name $vmnic \
+    --vnet-name $vnet \
+    --subnet $subnet \
+    --network-security-group $nsg
+done
+
+# VMs
+## NOTE: When specifying an existing NIC, do not specify NSG, public IP, ASGs, VNet or subnet.
+array=(1 2)
+for n in "${array[@]}"
+do
+  az vm create \
+    --name $vm_prefix$n \
+    --nics $nic_prefix$n \
+    --admin-username $vm_username \
+    --admin-password $vm_pwd \
+    --resource-group $rg \
+    --location $location \
+    --image win2022datacenter \
+    --size Standard_D2ds_v6 \
+    --no-wait
+done
+
+array=(1 2)
+for n in "${array[@]}"
+do
+    az vm auto-shutdown -g $rg -n $vm_prefix$n --time 1730 --email "pietronromano@live.com"
+done
+
+## Install IIS
+## Use az vm extension set to install IIS on the backend virtual machines and set the default website to the computer name.
+array=(1 2)
+for n in "${array[@]}"
+do
+    az vm extension set \
+    --publisher Microsoft.Compute \
+    --version 1.8 \
+    --name CustomScriptExtension \
+    --vm-name $vm_prefix$n \
+    --resource-group $rg \
+    --settings '{"commandToExecute":"powershell Add-WindowsFeature Web-Server; powershell Add-Content -Path \"C:\\inetpub\\wwwroot\\Default.htm\" -Value $($env:computername)"}'
+done
+
+## Add the virtual machines NICs to the backend pool
+array=(1 2)
+for n in "${array[@]}"
+do
+  az network nic ip-config address-pool add \
+    --address-pool $alb_backend_pool \
+    --ip-config-name ipconfig1 \
+    --nic-name $nic_prefix$n \
+    --resource-group $rg \
+    --lb-name $alb
+done
+
+
+# Create NAT gateway
+## To provide outbound internet access for resources in the backend pool, create a NAT gateway.
+
+## Create public IP
+az network public-ip create \
+    --resource-group $rg \
+    --name $natgw_pip \
+    --sku Standard \
+    --zone 1 2 3
+
+## Create NAT gateway resource
+az network nat gateway create \
+    --resource-group $rg \
+    --name $natgw \
+    --public-ip-addresses $natgw_pip \
+    --idle-timeout 10
+
+## Associate NAT gateway with subnet
+### Configure the source subnet in virtual network to use a specific NAT gateway resource with az network vnet subnet update.
+az network vnet subnet update \
+    --resource-group $rg \
+    --vnet-name $vnet \
+    --name $subnet \
+    --nat-gateway $natgw
+
+# NOTE: see bastion.azcli for how to create the bastion
+
+# Create test virtual machine
+
+az network nic create \
+    --resource-group $rg \
+    --name $vm_test_nic \
+    --vnet-name $vnet \
+    --subnet $subnet \
+    --network-security-group $nsg
+
+# Create the virtual machine with az vm create.
+az vm create \
+    --resource-group $rg \
+    --name $vm_test \
+    --nics $vm_test_nic \
+    --image Win2019Datacenter \
+    --admin-username $vm_username \
+    --admin-password $vm_pwd \
+    --resource-group $rg \
+    --location $location \
+    --image win2022datacenter \
+    --size Standard_D2ds_v6
+
+## Login to vm_test via Bastion, then open a command prompt:
+curl 10.1.1.4
+
+ - should return vm-1/vm-2 alternately
+
+
+ # Delete Resource Group
+az group delete --yes --resource-group $rg
