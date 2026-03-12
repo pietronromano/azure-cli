@@ -1,12 +1,16 @@
+# Get environment variables from .env file
+source .env
+echo "TENANT: $TENANT"
+
 # Login to  my tenant avoiding work tenant 
-az login --tenant pietronromanolive.onmicrosoft.com 
+az login --tenant $TENANT
 
 # Set a specific Subscription
-az account set -s ...
+az account set -s $SUBSCRIPTION
 
 # See the full list of available regions 
 az account list-locations -o table
  
-# Set / list local defaults
+# Example: Set / list local defaults
 az configure --defaults group=myRG web=myweb vm=myvm
 az configure --defaults --list-defaults -l

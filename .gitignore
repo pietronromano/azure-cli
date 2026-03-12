@@ -1,3 +1,6 @@
+# Ignore the .env file which contains sensitive information
+.env
+
 # Any compiled folders, at any level
 bin/
 obj/
