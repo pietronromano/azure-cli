@@ -1,16 +1,36 @@
-# Get environment variables from .env file
-source .env
-echo "TENANT: $TENANT"
+# Login to Azure and set subscription
 
-# Login to  my tenant avoiding work tenant 
+## References:
+- https://learn.microsoft.com/en-gb/cli/azure/authenticate-azure-cli-interactively?view=azure-cli-latest
+
+## Get environment variables from .env file
+echo "CURRENT DIRECTORY: $(pwd)"
+source .env
+echo "ENVIRONMENT VARIABLES: TENANT:$TENANT, SUBSCRIPTION:$SUBSCRIPTION, ORG:$ORG, LOCATION:$LOCATION, PROJECT:$PROJECT, RG:$RG"
+
+
+# Check Azure CLI version
+az version
+# Update Azure CLI if needed: SEE: https://learn.microsoft.com/en-us/cli/azure/update-azure-cli 
+az upgrade
+
+# If you want to disable the subscription selector feature, set the core.login_experience_v2 configuration property to off.
+az config set core.login_experience_v2=off
+
+# Login with a specific tenant: SEE https://learn.microsoft.com/en-us/cli/azure/authenticate-azure-cli-interactively?view=azure-cli-latest 
 az login --tenant $TENANT
 
 # Set a specific Subscription
 az account set -s $SUBSCRIPTION
 
+# From an Azure VM: Sign in with a user-assigned managed identity with --client-id, --object-id, or --resource-id
+# SEE: https://learn.microsoft.com/en-us/cli/azure/authenticate-azure-cli-managed-identity?view=azure-cli-latest
+az login --identity --identity --object-id <object_id>
+
+
 # See the full list of available regions 
 az account list-locations -o table
  
 # Example: Set / list local defaults
-az configure --defaults group=myRG web=myweb vm=myvm
+az configure --defaults "group=${RG}" web=myweb vm=myvm
 az configure --defaults --list-defaults -l

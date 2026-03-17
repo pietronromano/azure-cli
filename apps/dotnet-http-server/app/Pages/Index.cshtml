@@ -1,0 +1,16 @@
+﻿@page
+@using System.Text.Json
+@model IndexModel
+@{
+    ViewData["Title"] = "Home page";
+    EnvironmentInfo info = new EnvironmentInfo();
+    string jinfo = JsonSerializer.Serialize(info);
+}
+
+<div class="text-center">
+    <h1>Environment Info:</h1>
+    <p>
+        <code>@jinfo</code>
+    </p>
+    
+</div>

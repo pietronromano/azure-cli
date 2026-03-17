@@ -1,1 +1,6 @@
-# Azure CLI Exmaples
+# Azure CLI Examples
+
+## TODO
+- Inspector Gadget: interesting test tool to inspect running containers, can be used in combination with ACR Tasks to inspect the built image before pushing it to the registry
+  - ghcr.io/jelledruyts/inspectorgadget:latest
+  - https://github.com/jelledruyts/InspectorGadget

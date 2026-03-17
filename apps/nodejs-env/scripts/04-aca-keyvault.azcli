@@ -1,0 +1,92 @@
+# Add Kyeyvault secrets to a pre-existing Container App Job
+# DATE: 16-03-2026
+# RESULT: Worked Fine!
+
+# Environment ariables
+## GOTO: the ROOT of the repo to pick up environment variables from .env file:
+cd ../../../
+## RUN: login.azcli for .env variables, login and subscription selection
+## ENV VARS: TENANT, SUBSCRIPTION, ORG, LOCATION, PROJECT, RG
+
+# Override: westeurope didn't allow container apps env, because it's "FREE AKS"
+LOCATION=ukwest
+
+## Create local variables, note ACR can't have dashes in its name, so we need to remove them
+app="nodejsenv"
+aca_job="${ORG}-aca-${PROJECT}-${app}"
+
+# Keyvault: SEE keyvault/keyvault.azcli for how to create a KeyVault with Azure CLI
+kv="${ORG}-kv-${PROJECT}"
+echo "KeyVault Name: $kv"
+
+## Previously created secret (SEE keyvault/keyvault.azcli) with name "secret-01" and value "my-secret-value-01"
+secret_name="secret-01"
+
+##############################################################################################
+### Managed identity for our Container App to get secrets from KeyVault
+### SEE: identity/managed-identity.azcli for how create a Managed Identity and assign roles
+ 
+# Get the principal ID of the managed identity
+principalId=$(az identity show -g $RG -n $mi --query principalId -o tsv)
+echo "Principal ID: $principalId"
+ 
+# Container Registry: SEE 02-nje-docker-acr.azcli in this folder for how to create an ACR and push a Docker image to it from a local Dockerfile
+kv_id=$(az keyvault show --resource-group $RG --name $kv --query id --output tsv)
+echo "KeyVault ID: $kv_id"
+
+mi="${ORG}-mi-${PROJECT}"
+mi_id=$(az identity show -g $RG -n $mi --query "id" -o tsv)
+echo "Managed Identity ID: ${mi_id}"
+
+## Assign the Key Vault Secrets User role for the KeyVault to the managed identity.
+az role assignment create \
+  --assignee $principalId \
+  --role "Key Vault Secrets User" \
+  --scope $kv_id
+
+# Verify the role assignment
+az role assignment list \
+  --assignee $principalId \
+  --scope $kv_id \
+  --output table
+
+##############################################################################################
+
+# Get the secret URI from Key Vault
+secret_uri=$(az keyvault secret show --vault-name $kv --name $secret_name --query id -o tsv)
+echo "Secret URI: $secret_uri"
+
+# Add the secrets to the Container App Job, note that the secrets must be in the format: name=value and that secret names must be lowercase
+az containerapp job secret set \
+    --name $aca_job \
+    --resource-group $RG \
+    --secrets "$secret_name=keyvaultref:${secret_uri},identityref:${mi_id}"
+
+az containerapp job update \
+    --name $aca_job \
+    --resource-group $RG \
+    --set-env-vars "MY_VAR_FROM_SECRET=secretref:$secret_name"
+
+### Run the job to see it working with the KeyVault secret, note that the job will fail if the secrets are not properly configured or if the managed identity doesn't have the correct permissions to access the KeyVault
+az containerapp job start -n $aca_job -g $RG
+
+### Stream Logs: NOTE! it can take a few minutes for the logs to appear
+az containerapp job logs show -n $aca_job --container $aca_job -g $RG --follow
+
+## Save the Log Analytics workspace ID for the Container Apps environment to a variable.
+LOG_ANALYTICS_WORKSPACE_ID=$(az containerapp env show \
+    --name $aca_env \
+    --resource-group $RG \
+    --query "properties.appLogsConfiguration.logAnalyticsConfiguration.customerId" \
+    --output tsv)
+echo "Log Analytics Workspace ID: $LOG_ANALYTICS_WORKSPACE_ID"
+
+
+## Run a query against Log Analytics to check the Environment Variable based on the secret we added
+az monitor log-analytics query \
+    --workspace $LOG_ANALYTICS_WORKSPACE_ID \
+    --analytics-query "ContainerAppConsoleLogs_CL | where Log_s contains 'MY_VAR_FROM_SECRET'" \
+    --query "[].Log_s"
+
+
+   

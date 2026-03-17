@@ -1,0 +1,56 @@
+# Service Bus
+
+## References:
+- https://learn.microsoft.com/en-gb/azure/service-bus-messaging/service-bus-quickstart-cli
+- https://learn.microsoft.com/en-us/cli/azure/servicebus/queue?view=azure-cli-latest
+
+
+# Variables
+## GOTO: the ROOT of the repo to pick up environment variables from .env file:
+cd ../../../
+## RUN: login.azcli for .env variables, login and subscription selection
+## Env Vars: TENANT, SUBSCRIPTION, ORG, LOCATION, PROJECT, RG
+
+sb_namespace="${ORG}-sb-${PROJECT}"
+sb_queue="testqueue"
+
+
+
+# IF NEEDED: Create a resource group
+az group create --name $RG --location $LOCATION
+
+# Create a Service Bus namespace and Queue
+
+## Run the following command to create a Service Bus messaging namespace.
+az servicebus namespace create --resource-group $RG --name $sb_namespace --location $LOCATION
+
+## Run the following command to create a queue in the namespace you created in the previous step. In this example, $RG is the resource group you created in the previous step. $sb_namespace is the name of the Service Bus namespace created in that resource group.
+az servicebus queue create --resource-group $RG --namespace-name $sb_namespace --name $sb_queue
+
+
+#####################################################################
+
+# Assigning permissions to the Service Bus namespace for our user-assigned managed identity
+## Get the Service Bus namespace resource ID
+sb_namespace_id=$(az servicebus namespace show --resource-group $RG --name $sb_namespace --query id -o tsv)
+echo "Service Bus Namespace Resource ID: $sb_namespace_id"
+
+## Get the principal ID of our managed identity in this resource group
+principalId=$(az identity show -g $RG -n $mi --query principalId -o tsv)
+echo "Principal ID: $principalId"
+
+## Assign the role at the Service Bus namespace scope
+- https://learn.microsoft.com/en-gb/azure/service-bus-messaging/service-bus-dotnet-get-started-with-queues?tabs=passwordless#azure-built-in-roles-for-azure-service-bus
+
+## Roles: Azure Service Bus Data [Owner | Sender | Receiver]
+az role assignment create \
+  --assignee $principalId \
+  --role "Azure Service Bus Data Owner" \
+  --scope $sb_namespace_id
+
+## Verify the role assignment: (SEE also Portal: Managed Identiy: Azure role assignments)
+az role assignment list \
+  --assignee $principalId \
+  --scope $sb_namespace_id \
+  --output table
+

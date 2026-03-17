@@ -1,0 +1,108 @@
+# Generic script to create:
+ - An Azure Container Registry
+ - An Azure Container Apps Environment with a custom VNet 
+
+# Pre-requisites:
+- Managed Identity 
+
+
+##############################################################################################
+
+# Environment Variables
+## GOTO: the ROOT of the repo to pick up environment variables from .env file:
+cd ../../../
+## RUN: login.azcli for .env variables, login and subscription selection
+## ENV VARS: TENANT, SUBSCRIPTION, ORG, LOCATION, PROJECT, RG
+
+## Create local variables, note ACR can't have dashes in its name, so we need to remove them
+acr="${ORG}acr${PROJECT//-/}"
+
+# We suppose this already exists: SEE: identity/managed-identity.azcli for how to create a Managed Identity
+mi="${ORG}-mi-${PROJECT}-${app}"
+
+# Our Container Apps Environment name
+aca_env="${ORG}-acaenv-${PROJECT}"
+
+vnet="${ORG}-vnet-${PROJECT}"
+subnet_aca="${ORG}-snet-${PROJECT}"
+
+##############################################################################################
+
+## IF NEEDED: Create Resource Group
+az group create --name $RG --location $LOCATION
+
+## Create Container Registry
+az acr create -n $acr -g $RG --admin-enabled false --sku Standard
+
+az acr show -n $acr -g $RG
+
+az acr check-health --name $acr
+
+# IF NEEDED: Assign AcrPush role to your user
+az role assignment create --assignee $(az ad signed-in-user show --query id -o tsv) \
+  --role AcrPush --scope $(az acr show -n $acr -g $RG --query id -o tsv)
+
+
+##############################################################################################
+
+
+# Managed identity for our Container App to pull from ACR
+## SEE: identity/managed-identity.azcli for how create a Managed Identity
+
+# Get the principal ID of the managed identity in this resource group
+principalId=$(az identity show -g $RG -n $mi --query principalId -o tsv)
+echo "Principal ID: $principalId"
+
+acr_id=$(az acr show --resource-group $RG --name $acr --query id --output tsv)
+echo "ACR ID: $acr_id"
+
+## Assign the AcrPull role for the Azure Container Registry to the managed identity.
+az role assignment create \
+  --assignee $principalId \
+  --role "AcrPull" \
+  --scope $acr_id
+
+# Verify the role assignment
+az role assignment list \
+  --assignee $principalId \
+  --scope $acr_id \
+  --output table
+
+##############################################################################################
+    
+## Create the VNet and Subnet delegated to ACA
+az network vnet create \
+    --resource-group $RG \
+    --name $vnet \
+    --LOCATION $LOCATION \
+    --address-prefix 10.0.0.0/16
+         
+az network vnet subnet create \
+    --resource-group $RG \
+    --vnet-name $vnet \
+    --name $subnet_aca \
+    --address-prefixes 10.0.1.0/24 \
+    --delegations Microsoft.App/environments
+
+### Get the subnet resource ID for use in creating the Container Apps Environment     
+subnet_aca_id=$(az network vnet subnet show \
+    --resource-group $RG \
+    --vnet-name $vnet \
+    --name $subnet_aca \
+    --query "id" -o tsv | tr -d '[:space:]')
+echo $subnet_aca_id
+
+##############################################################################################
+
+## Create ContainerApps Env: 
+### internal-only false: allows access from anywhere (instead of just vnet) NOTE: FOR EDUCATION AND TESTING ONLY
+### internal-only true: just vnet access, (although we can still use the debug console to curl into it)
+az containerapp env create \
+    --name $aca_env \
+    --resource-group $RG \
+    --LOCATION $LOCATION \
+    --infrastructure-subnet-resource-id $subnet_aca_id \
+    --internal-only false
+
+
+##############################################################################################

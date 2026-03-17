@@ -1,0 +1,139 @@
+# Build Docker Image on ACR and Deploy to Azure Container Apps with Azure CLI
+# DATE: 2026-03-17
+# RESULT: Worked fine!
+
+##############################################################################################
+
+# Environment Variables
+## GOTO: the ROOT of the repo to pick up environment variables from .env file:
+cd ../../../
+## RUN: login.azcli for .env variables, login and subscription selection
+## ENV VARS: TENANT, SUBSCRIPTION, ORG, LOCATION, PROJECT, RG
+ 
+## Create local variables, note ACR can't have dashes in its name, so we need to remove them
+acr="${ORG}acr${PROJECT//-/}"
+tag="v1.0.0"
+acr_repo="${acr}.azurecr.io/${app}:${tag}"
+app="sbsender"
+host_port="8080"
+container_port="8080"
+target_port=$container_port
+
+mi="${ORG}-mi-${PROJECT}"
+
+# PREXISTING Container Apps Environment, SEE: aca/aca-acr-env.azcli
+aca_env="${ORG}-acaenv-${PROJECT}"
+
+# NOTE! must be less than 32 characters
+aca_app="${ORG}-aca-${PROJECT}-sbsender"
+
+##############################################################################################
+
+## Create the Container App
+### SEE: https://learn.microsoft.com/en-us/azure/container-apps/containerapp-up
+### SEE: https://learn.microsoft.com/en-us/cli/azure/containerapp?view=azure-cli-latest#az-containerapp-up(containerapp)
+### user-assigned: specify the managed identity that we created earlier for ACR access
+### ingress "external": allows acces from VNET, "internal" only allows access from within the Environment
+
+mi_id=$(az identity show -g $RG -n $mi --query "id" -o tsv)
+echo "Managed Identity ID: "$mi_id
+
+# Go back to the app folder for the environment variables and secrets
+cd apps/dotnet-service-bus/ServiceBus.Sender
+source .env
+echo "MANAGED_IDENTITY_CLIENT_ID: $MANAGED_IDENTITY_CLIENT_ID"
+echo "SERVICE_BUS_NAMESPACE: $SERVICE_BUS_NAMESPACE"
+echo "SERVICE_BUS_QUEUE: $SERVICE_BUS_QUEUE"
+
+# Secrets
+secrets="managed-identity-client-id=$MANAGED_IDENTITY_CLIENT_ID"
+echo $secrets
+
+# Environment variables make reference to secrets with the syntax: env_var_name=secretref:secret_name
+env_vars="MANAGED_IDENTITY_CLIENT_ID=secretref:managed-identity-client-id"
+env_vars="$env_vars SERVICE_BUS_NAMESPACE=$SERVICE_BUS_NAMESPACE"
+env_vars="$env_vars SERVICE_BUS_QUEUE=$SERVICE_BUS_QUEUE"
+echo $env_vars
+
+az containerapp create \
+  --name $aca_app \
+  --resource-group $RG \
+  --environment $aca_env \
+  --secrets $secrets \
+  --env-vars $env_vars \
+  --target-port $target_port \
+  --ingress external \
+  --image $acr.azurecr.io/$app:$tag \
+  --registry-identity $mi_id \
+  --registry-server $acr.azurecr.io \
+  --user-assigned $mi_id
+
+### See full details
+az containerapp show -n $aca_app -g $RG
+
+### Get the fqdn 
+aca_fqdn=$(az containerapp show -n $aca_app -g $RG \
+    --query 'properties.configuration.ingress.fqdn' \
+    --output tsv)
+echo "FQDN: $aca_fqdn"
+
+### Test the Container App with curl
+### NOTE: the container app can be accessed via http OR https://<>, (HTTP gets redirected to HTTPS)
+### NOTE: Use the URL WITHOUT the target port (which is for the internal container port)
+curl "https://"$aca_fqdn"/send?message=HelloFromCurl&num=10"
+
+##############################################################################################
+
+### Debug the Container App
+### Stream Logs
+az containerapp logs show -n $aca_app -g $RG --follow
+
+### Container Apps Console / Debug: allows connecting to live console
+### - NOTE: Can do this also from the "Console" item in the Portal, both for Console and Debug
+### - CONSOLE: https://learn.microsoft.com/en-us/azure/container-apps/container-console?tabs=bash
+###   - Debian image (from dotnet)
+### - DEBUG: https://learn.microsoft.com/en-us/azure/container-apps/container-debug-console?tabs=bash
+###   - separate container, utils installed, "Common Base Linux Mariner"
+
+az containerapp revision list \
+  --name $aca_app \
+  --resource-group $RG \
+  --query "[].name"
+
+az containerapp replica list \
+  --name $aca_app \
+  --resource-group $RG \
+  --query "[].{Containers:properties.containers[].name, Name:name}"
+
+## GAVE ERROR: DEBUG in a separate container, with the most recent revision
+az containerapp debug \
+  --name $aca_app \
+  --resource-group $RG
+
+
+## [In a separate terminal]: Connect to the actual container, most recent revision
+az containerapp exec \
+  --name $aca_app \
+  --resource-group $RG
+
+## Once inside the container: see app contents in this dir:
+cd /proc/1/cwd/
+ls 
+
+## Check dotnet info/  runtime versions (only installed on Container Console, NOT the Debug container)
+dotnet --info
+dotnet --list-runtimes
+
+## See proceses:
+ps aux
+
+## Check environment variables
+printenv
+
+## Exit the container
+exit
+
+##############################################################################################
+
+# Clean up - After finishing our tests, we delete the resource group and all related resources
+az group delete --name $RG --yes --no-wait

@@ -1,0 +1,109 @@
+# DATE: 12-03-2026
+# Create a basic AKS cluster with default settings
+# REFERENCES: 
+- SOURCE (based mainly on): https://github.com/HoussemDellai/aks-course/tree/main/02_kubernetes_intro_for_apps_teams
+- UDEMY: https://www.udemy.com/course/learn-aks-network-security/learn/lecture/36209682#overview
+- MS LEARN: https://learn.microsoft.com/en-us/azure/aks/learn/quick-kubernetes-deploy-cli
+
+# RESULTS: 
+
+##########################################################################################
+
+# Install kubectl CLI
+## Macos: use Homebrew to avoid permission issues on '/usr/local/bin/kubectl'
+brew install kubectl
+
+## Windows 
+az aks install-cli
+
+
+##########################################################################################
+# Variables
+## RUN: login.azcli for .env variables, login and subscription selection
+## Env Vars: TENANT, SUBSCRIPTION, ORG, LOCATION,PROJECT,RG
+
+## Create the variables, note ACR can't have dashes in its name, so we need to remove them
+clu="${ORG}-aks-${PROJECT}"
+acr="${ORG}acr${PROJECT//-/}"
+app="DotNetHttpServer"
+tag="v1.0.0"
+host_port="8080"
+
+# Register resource providers (if needed)
+az provider show --namespace Microsoft.ContainerService --query registrationState
+az provider register --namespace Microsoft.ContainerService
+
+# Create a Resource Group
+az group create --name $rg --location $location
+
+# Create a Cluster: SKU: Base, Pricing tier: Free, One node, System-Assigned managed identity, 
+az aks create \
+    --resource-group $rg \
+    --name $clu \
+    --node-count 1 \
+    --generate-ssh-keys \
+    --location $location
+
+## Output: see aks-basic-output.json
+##  "networkPlugin": "azure", "networkPluginMode": "overlay","networkPolicy": "none","outboundType": "loadBalancer",
+
+
+# Connect to the cluster
+az aks get-credentials --resource-group $rg --name $clu --overwrite-existing
+
+
+# Check that the connection was successfull by listing the nodes and pods inside the cluster:
+kubectl get nodes
+kubectl get pods
+
+##########################################################################################
+
+# Deploy Pods from a public registry (simple example, normally would use a Deployment instead of a Pod)
+## This image is available in a public `container registry` called `Docker Hub`, available here [hub.docker.com/search?q=](https://hub.docker.com/search?q=).
+kubectl run nginx --image=nginx
+# pod/nginx created  
+
+## List the created pods: (PORTAL: Workloads > Pods)
+kubectl get pods
+# NAME    READY   STATUS    RESTARTS   AGE  
+# nginx   1/1     Running   0          10s 
+
+## View the private IP address of the Pod and its host node.
+kubectl get pods -o wide
+# NAME    READY   STATUS    IP           NODE                             
+# nginx   1/1     Running   10.244.2.3   aks-agentpool-18451317-vmss000001
+
+
+## Create a Service to expose the nginx pod on the internet through a public IP address and Load Balancer.
+kubectl expose pod nginx --type=LoadBalancer --port=80
+# service/nginx exposed
+
+# List the created services: (PORTAL: Networking > Services and ingresses)
+kubectl get svc
+# NAME         TYPE           CLUSTER-IP    EXTERNAL-IP     PORT(S)     
+# kubernetes   ClusterIP      10.0.0.1      <none>          443/TCP     
+# nginx        LoadBalancer   10.0.147.78   20.23.206.9   80:32640/TCP
+
+# Test the nginx service by curling the public IP address of the Load Balancer (or using a browser).
+curl 20.23.206.9
+
+
+##########################################################################################
+
+
+# Creating kubernetes YAML manifest files
+## Use the kubectl command line to generate a YAML manifest for a Pod.
+cd aks
+kubectl run nginx-yaml --restart=Never --image=nginx -o yaml --dry-run=client > nginx-pod.yaml
+
+## Deploy the YAML manifest to AKS:
+kubectl apply -f ./nginx-pod.yaml
+# pod/nginx-yaml created
+
+## Verify the Pods created by YAML manifest are running.
+kubectl get pods
+# NAME         READY   STATUS    RESTARTS   AGE
+# dotnet-app   1/1     Running   0          9m19s
+# nginx        1/1     Running   0          21m
+# nginx-yaml   1/1     Running   0          9s
+

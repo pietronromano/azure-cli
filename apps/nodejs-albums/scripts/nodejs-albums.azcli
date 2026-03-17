@@ -1,0 +1,66 @@
+# Creating an Azure Container Apps for Backend and Frontend app
+# SOURCE: aca/aca-course-code/02_create_frontend_backend_cli/Readme.md
+
+
+# Variables
+## GOTO: the ROOT of the repo to pick up environment variables from .env file:
+cd ../../../
+## RUN: login.azcli for .env variables, login and subscription selection
+## Env Vars: TENANT, SUBSCRIPTION, ORG, LOCATION,PROJECT,RG
+
+aca_app="albums"
+aca_env="${PROJECT}-${aca_app}-env"
+aca_backend="${PROJECT}-${aca_app}-backend"
+aca_frontend="${PROJECT}-${aca_app}-frontend"
+
+
+# create resource group
+az group create \
+  --name $RG \
+  --location $LOCATION
+
+# create ACA Environment
+az containerapp env create \
+  --name $aca_env \
+  --resource-group $RG \
+  --location $LOCATION
+
+# deploy backend container
+az containerapp create \
+  --name $aca_backend \
+  --resource-group $RG \
+  --environment $aca_env \
+  --image ghcr.io/houssemdellai/containerapps-album-backend:v1 \
+  --target-port 3500 \
+  --ingress external
+
+# get backend API URL
+API_BASE_URL=$(az containerapp show \
+  --name $aca_backend \
+  --resource-group $RG \
+  --query 'properties.configuration.ingress.fqdn' \
+  --output tsv)
+
+echo $API_BASE_URL
+
+# deploy frontend container
+az containerapp create \
+  --name $aca_frontend \
+  --resource-group $RG \
+  --environment $aca_env \
+  --image ghcr.io/houssemdellai/containerapps-album-frontend:v1 \
+  --target-port 3000 \
+  --ingress 'external' \
+  --env-vars API_BASE_URL=https://$API_BASE_URL
+
+# get app URL/FQDN
+az containerapp show \
+  --name $aca_frontend \
+  --resource-group $RG \
+  --query properties.configuration.ingress.fqdn
+# "my-container-app.redwater-90523232.westeurope.azurecontainerapps.io"
+
+# With the app URL/FQDN, you can open it in your browser to view the application running.
+
+# Then you can delete the created resources.
+az group delete --name $RG --yes

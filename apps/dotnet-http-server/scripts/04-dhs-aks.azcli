@@ -1,0 +1,47 @@
+##########################################################################################
+
+
+## SEE previous script for building App with Docker and creating a container registry in Azure (ACR): 
+
+
+# GOTO: the ROOT of the repo to pick up environment variables from .env file:
+cd ../../../
+# RUN: login.azcli to set environment variables, login and subscription selection steps
+# Env Vars: TENANT, SUBSCRIPTION, ORG, LOCATION,PROJECT,RG
+
+# Create the variables, note ACR can't have dashes in its name, so we need to remove them
+clu="${ORG}-aks-${PROJECT}"
+acr="${ORG}acr${PROJECT//-/}"
+app="DotNetHttpServer"
+tag="v1.0.0"
+host_port="8080"
+
+## Attach the ACR created in '02-docker-acr.sh' to the PREVIOUSLY CREATED AKS cluster
+az aks update --name $clu --resource-group $rg --attach-acr $acr
+
+
+## Deploying the image from ACR into the AKS cluster
+kubectl run ${app} --image="${acr}.azurecr.io/${app}:${tag}"
+# pod/${app} created
+
+## Verify the pod deployed successfully (PORTAL: Workloads > Pods)
+kubectl get pods
+# NAME         READY   STATUS    RESTARTS
+# ${app}       1/1     Running   0       
+# nginx        1/1     Running   0       
+
+##  Expose the app pod on a public IP address.
+kubectl expose pod ${app} --type=LoadBalancer --port=$host_port
+# service/${app} exposed
+
+## View the created service(PORTAL: Networking > Services and ingresses) 
+## Note The service creation may be in `Pending` state. 
+## That is because it takes few seconds to create the public IP address and attach it to the Load Balancer.
+## Keep watching for the service until it will be created. Use the `-w` or `--watch`.
+
+kubectl get svc -w
+# NAME         TYPE           CLUSTER-IP    EXTERNAL-IP     PORT(S)     
+# ${app}       LoadBalancer   10.0.202.46   <pending>       80:31774/TCP
+# kubernetes   ClusterIP      10.0.0.1      <none>          443/TCP     
+# nginx        LoadBalancer   10.0.147.78   20.61.145.135   80:32640/TCP
+

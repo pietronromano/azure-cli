@@ -1,0 +1,31 @@
+# Create a KeyVault with Azure CLI
+# DATE: 16-03-2026
+# RESULT: Worked Fine!
+
+# Reference:
+- https://learn.microsoft.com/en-us/azure/key-vault/general/quick-create-cli
+
+##############################################################################################
+
+
+# Environment Variables
+## GOTO: the ROOT of the repo to pick up environment variables from .env file:
+cd ../../../
+## RUN: login.azcli for .env variables, login and subscription selection
+## ENV VARS: TENANT, SUBSCRIPTION, ORG, LOCATION, PROJECT, RG
+
+# Key vault name: A string of 3 to 24 characters that can contain only numbers (0-9), letters (a-z, A-Z), and hyphens (-)
+kv="${ORG}-kv-${PROJECT}"
+echo "KeyVault Name: $kv"
+
+az keyvault create --name $kv --resource-group $RG --enable-rbac-authorization true
+
+az keyvault show --name $kv --resource-group $RG
+
+# Avoid RBAC Error: Assign Key Vault Secrets Officer role to the current user
+user_id=$(az ad signed-in-user show --query id -o tsv)
+kv_id=$(az keyvault show --name $kv --resource-group $RG --query id -o tsv)
+az role assignment create --assignee $user_id --role "Key Vault Secrets Officer" --scope $kv_id
+
+# Create a secret in the KeyVault
+az keyvault secret set --vault-name $kv --name "secret-01" --value "my-secret-value-01"
