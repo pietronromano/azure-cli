@@ -16,32 +16,32 @@ az network nsg list --out table
 
 # Create a network security group with az network nsg create
 az network nsg create \
-  --resource-group $rg \
+  --resource-group $RG \
   --location $location \
   --name $nsg
 
 # Use az network nsg show to view the details of an NSG.
 az network nsg show \
-    --resource-group $rg \
+    --resource-group $RG \
     --name $nsg
 
 
 # Associate [OR DISASSOCIATE] the network security group to the subnet with az network vnet subnet update:
 az network vnet subnet update \
-  --vnet-name $vnet \
+  --vnet-name $VNET \
   --name $subnet \
-  --resource-group $rg \
+  --resource-group $RG \
   --network-security-group $nsg
 
 
 # Create application security groups
 az network asg create \
-  --resource-group $rg \
+  --resource-group $RG \
   --name asg-web \
   --location $location
 
   az network asg create \
-  --resource-group $rg \
+  --resource-group $RG \
   --name asg-mgt \
   --location $location
 
@@ -49,7 +49,7 @@ az network asg create \
 # The following example creates a rule that allows traffic inbound from the internet to the asg-web application security group over ports 80 and 443:
 
 az network nsg rule create \
-  --resource-group $rg \
+  --resource-group $RG \
   --nsg-name $nsg \
   --name Allow-Web-All \
   --access Allow \
@@ -64,7 +64,7 @@ az network nsg rule create \
  
 # The following example creates a rule that allows traffic inbound from the Internet to the asg-mgt application security group over port 22:
 az network nsg rule create \
-  --resource-group $rg \
+  --resource-group $RG \
   --nsg-name $nsg \
   --name Allow-SSH-All \
   --access Allow \
@@ -79,11 +79,11 @@ az network nsg rule create \
   # Create VMs: NOTE Capacity Restrictions: Standard_DS1_v2 
   vmweb="vm-web"
   az vm create \
-  --resource-group $rg \
+  --resource-group $RG \
   --name $vmweb \
   --image Ubuntu2204 \
   --size Standard_D2ds_v6 \
-  --vnet-name $vnet \
+  --vnet-name $VNET \
   --subnet $subnet \
   --nsg "" \
   --admin-username pietronromano \
@@ -91,16 +91,16 @@ az network nsg rule create \
   --authentication-type password \
   --assign-identity
 
-  az vm auto-shutdown -g $rg -n $vmweb --time 1730 --email "pietronromano@live.com" 
+  az vm auto-shutdown -g $RG -n $vmweb --time 1730 --email "pietronromano@live.com" 
 
 
   vmmgt="vm-mgt"
   az vm create \
-  --resource-group $rg \
+  --resource-group $RG \
   --name $vmmgt \
   --image Ubuntu2204 \
   --size Standard_D2ds_v6 \
-  --vnet-name $vnet \
+  --vnet-name $VNET \
   --subnet $subnet \
   --nsg "" \
   --admin-username pietronromano \
@@ -108,39 +108,39 @@ az network nsg rule create \
   --authentication-type password \
   --assign-identity
 
-  az vm auto-shutdown -g $rg -n $vmmgt --time 1730 --email "pietronromano@live.com" 
+  az vm auto-shutdown -g $RG -n $vmmgt --time 1730 --email "pietronromano@live.com" 
 
 
 # Use az network nic update to associate the network interface with the application security group. 
 # The following example associates the asg-web application security group with the vm-web-nic network interface:
 
 # Retrieve the network interface name associated with the virtual machine
-web_nic_name=$(az vm show --resource-group $rg --name $vmweb --query 'networkProfile.networkInterfaces[0].id' -o tsv | xargs basename)
+web_nic_name=$(az vm show --resource-group $RG --name $vmweb --query 'networkProfile.networkInterfaces[0].id' -o tsv | xargs basename)
 echo $web_nic_name
 
 # Associate the application security group with the network interface
 az network nic ip-config update \
     --name ipconfigvm-web \
     --nic-name $web_nic_name \
-    --resource-group $rg \
+    --resource-group $RG \
     --application-security-groups asg-web
 
 
 # Repeat the command to associate the asg-mgmt application security group with the vm-mgmt-nic network interface.
 # Retrieve the network interface name associated with the virtual machine
-mgt_nic_name=$(az vm show --resource-group $rg --name $vmmgt --query 'networkProfile.networkInterfaces[0].id' -o tsv | xargs basename)
+mgt_nic_name=$(az vm show --resource-group $RG --name $vmmgt --query 'networkProfile.networkInterfaces[0].id' -o tsv | xargs basename)
 echo $mgt_nic_name
 
 # Associate the application security group with the network interface
 az network nic ip-config update \
     --name ipconfigvm-mgt \
     --nic-name $mgt_nic_name \
-    --resource-group $rg \
+    --resource-group $RG \
     --application-security-groups asg-mgt
 
 
 # Test traffic filters
-mgt_ip=$(az vm show --show-details --resource-group $rg --name vm-mgt --query publicIps --output tsv)
+mgt_ip=$(az vm show --show-details --resource-group $RG --name vm-mgt --query publicIps --output tsv)
 echo $mgt_ip
 
 # SSH into the mgt vm
@@ -166,6 +166,6 @@ curl vm-web
 # Sign out of the vm-mgmt VM. 
 exit
 # To confirm that you can access the vm-web web server from outside of Azure, enter curl <publicIpAddress> from your own computer
-web_ip=$(az vm show --show-details --resource-group $rg --name vm-web --query publicIps --output tsv)
+web_ip=$(az vm show --show-details --resource-group $RG --name vm-web --query publicIps --output tsv)
 echo $web_ip
 curl $web_ip

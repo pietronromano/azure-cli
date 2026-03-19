@@ -21,13 +21,13 @@ route_table="route-table-public"
 
 # Create a resource group.
 az group create \
-    --name $rg \
+    --name $RG \
     --location $location
 
 # Create a virtual network with one subnet with az network vnet create.
 az network vnet create \
-    --name $vnet \
-    --resource-group $rg \
+    --name $VNET \
+    --resource-group $RG \
     --address-prefix 10.0.0.0/16 \
     --subnet-name $subnet_default \
     --subnet-prefix 10.0.0.0/24
@@ -36,22 +36,22 @@ az network vnet create \
 # Create two more subnets with az network vnet subnet create.
 ## Create a bastion subnet.
 az network vnet subnet create \
-    --vnet-name $vnet \
-    --resource-group $rg \
+    --vnet-name $VNET \
+    --resource-group $RG \
     --name AzureBastionSubnet \
     --address-prefix 10.0.1.0/24
 
 ## Create a private subnet.
 az network vnet subnet create \
-    --vnet-name $vnet \
-    --resource-group $rg \
+    --vnet-name $VNET \
+    --resource-group $RG \
     --name $subnet_private \
     --address-prefix 10.0.2.0/24
  
 # Create a DMZ subnet.
 az network vnet subnet create \
-    --vnet-name $vnet \
-    --resource-group $rg \
+    --vnet-name $VNET \
+    --resource-group $RG \
     --name $subnet_dmz \
     --address-prefix 10.0.3.0/24
 
@@ -61,49 +61,49 @@ az network vnet subnet create \
 # Create VMs
 ## VM NVA
 az vm create \
-    --resource-group $rg \
+    --resource-group $RG \
     --name $vm_nva \
     --image Ubuntu2404 \
     --size Standard_D2ds_v6 \
     --admin-username $username \
     --generate-ssh-keys \
-    --vnet-name $vnet \
+    --vnet-name $VNET \
     --subnet $subnet_dmz
 
-az vm auto-shutdown -g $rg -n $vm_nva --time 1730 --email "pietronromano@live.com" 
+az vm auto-shutdown -g $RG -n $vm_nva --time 1730 --email "pietronromano@live.com" 
 
 ## VM public
 az vm create \
-    --resource-group $rg \
+    --resource-group $RG \
     --name $vm_public \
     --image Ubuntu2404 \
     --size Standard_D2ds_v6 \
     --admin-username $username \
     --generate-ssh-keys \
-    --vnet-name $vnet \
+    --vnet-name $VNET \
     --subnet $subnet_public \
     --no-wait
 
-az vm auto-shutdown -g $rg -n $vm_nva --time 1730 --email "pietronromano@live.com" 
+az vm auto-shutdown -g $RG -n $vm_nva --time 1730 --email "pietronromano@live.com" 
 
 ## VM private
 az vm create \
-    --resource-group $rg \
+    --resource-group $RG \
     --name $vm_private \
     --image Ubuntu2404 \
     --size Standard_D2ds_v6 \
     --admin-username $username \
     --generate-ssh-keys \
-    --vnet-name $vnet \
+    --vnet-name $VNET \
     --subnet $subnet_private
 
-az vm auto-shutdown -g $rg -n $vm_nva --time 1730 --email "pietronromano@live.com" 
+az vm auto-shutdown -g $RG -n $vm_nva --time 1730 --email "pietronromano@live.com" 
 
 
 # Enable IP forwarding on the NVA
 az network nic update \
     --name $vm_nva_nic \
-    --resource-group $rg \
+    --resource-group $RG \
     --ip-forwarding true
 
 # Enable IP forwarding in the operating system
@@ -125,14 +125,14 @@ net.ipv4.ip_forward=1
 
 # Create a route table
 az network route-table create \
-    --resource-group $rg \
+    --resource-group $RG \
     --name $route_table
 
 
 ## Create a route in the route table with az network route-table route create.
 az network route-table route create \
     --name to-private-subnet \
-    --resource-group $rg \
+    --resource-group $RG \
     --route-table-name $route_table \
     --address-prefix 10.0.2.0/24 \
     --next-hop-type VirtualAppliance \
@@ -140,9 +140,9 @@ az network route-table route create \
 
 ## Associate the route-table-subnet-public route table to the subnet-public subnet with az network vnet subnet update.
 az network vnet subnet update \
-    --vnet-name $vnet \
+    --vnet-name $VNET \
     --name $subnet_public \
-    --resource-group $rg \
+    --resource-group $RG \
     --route-table $route_table
 
 

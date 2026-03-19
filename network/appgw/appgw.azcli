@@ -22,13 +22,13 @@ appgw_routing_rule="rule-pathmap-to-backends"
 
 # Create a resource group.
 az group create \
-    --name $rg \
+    --name $RG \
     --location $location
 
 # Create a virtual network with one subnet for the appgw
 az network vnet create \
-    --name $vnet \
-    --resource-group $rg \
+    --name $VNET \
+    --resource-group $RG \
     --address-prefix 10.0.0.0/16 \
     --subnet-name $subnet_appgw \
     --subnet-prefix 10.0.0.0/24
@@ -38,8 +38,8 @@ az network vnet create \
 for i in ${!backends[@]}; do
   # echo "element $i is ${backends[$i]}"
   az network vnet subnet create \
-    --vnet-name $vnet \
-    --resource-group $rg \
+    --vnet-name $VNET \
+    --resource-group $RG \
     --name "subnet-"${backends[$i]} \
     --address-prefix ${cidrs[$i]}"/24"
 done
@@ -53,36 +53,36 @@ cat $cloud_init
 ##  OPTION 1: Ubuntu
 for backend in "${backends[@]}"; do
     az vm create \
-        --resource-group $rg \
+        --resource-group $RG \
         --name "vm-"$backend \
         --image Ubuntu2404 \
         --size Standard_D2ds_v6 \
         --admin-username $username \
         --generate-ssh-keys \
-        --vnet-name $vnet \
+        --vnet-name $VNET \
         --subnet "subnet-"$backend \
         --custom-data $cloud_init
 
-    az vm open-port --resource-group $rg --name $"vm-"$backend --port 80 
-    az vm auto-shutdown --resource-group $rg --name $"vm-"$backend --time 1730 --email "pietronromano@live.com" 
+    az vm open-port --resource-group $RG --name $"vm-"$backend --port 80 
+    az vm auto-shutdown --resource-group $RG --name $"vm-"$backend --time 1730 --email "pietronromano@live.com" 
 done
 
 ## OPTION 2: Windows (for using wireshark)
 for backend in "${backends[@]}"; do
     az vm create \
-        --resource-group $rg \
+        --resource-group $RG \
         --name "vm-"$backend \
         --image Win2022Datacenter \
         --size Standard_D2ds_v6 \
         --admin-username $username \
         --admin-password Axml-xsl0123 \
-        --vnet-name $vnet \
+        --vnet-name $VNET \
         --subnet "subnet-"$backend
 
-    az vm auto-shutdown -g $rg -n "vm-"$backend --time 1730 --email "pietronromano@live.com"
-    az vm open-port --resource-group $rg --name "vm-"$backend --port 80
+    az vm auto-shutdown -g $RG -n "vm-"$backend --time 1730 --email "pietronromano@live.com"
+    az vm open-port --resource-group $RG --name "vm-"$backend --port 80
 
-    az vm run-command invoke -g $rg \
+    az vm run-command invoke -g $RG \
         --name "vm-"$backend \
         --command-id RunPowerShellScript \
         --scripts "Install-WindowsFeature -name Web-Server -IncludeManagementTools"
@@ -93,7 +93,7 @@ done
     -  C:\inetpub\wwwroot\images|video\index.html: "<h1>Hello from: Images|Video VM </h1>")
 ## Wireshark: use the x64 Installer, all default options
 for backend in "${backends[@]}"; do
-    vm_ip=$(az vm show --show-details --resource-group $rg --name $"vm-"$backend --query publicIps --output tsv)
+    vm_ip=$(az vm show --show-details --resource-group $RG --name $"vm-"$backend --query publicIps --output tsv)
     printf $"vm-"$backend" ip: "$vm_ip"\n"
     curl $vm_ip
     printf "\n...\n"
@@ -104,7 +104,7 @@ done
 
 # AppGW
 az network public-ip create \
-  --resource-group $rg \
+  --resource-group $RG \
   --location $location \
   --name $pip_appgw \
   --allocation-method Static \
@@ -114,8 +114,8 @@ az network public-ip create \
 az network application-gateway create \
   --name $appgw \
   --location $location \
-  --resource-group $rg \
-  --vnet-name $vnet \
+  --resource-group $RG \
+  --vnet-name $VNET \
   --subnet $subnet_appgw \
   --capacity 1 \
   --sku Standard_v2 \
@@ -129,11 +129,11 @@ az network application-gateway create \
 
 # Add backend pools, linked to servers, but no rules yet
 for backend in "${backends[@]}"; do
-    vm_ip=$(az vm show --show-details --resource-group $rg --name $"vm-"$backend --query publicIps --output tsv)
+    vm_ip=$(az vm show --show-details --resource-group $RG --name $"vm-"$backend --query publicIps --output tsv)
     
     az network application-gateway address-pool create \
         --gateway-name $appgw \
-        --resource-group $rg \
+        --resource-group $RG \
         --name $"backend-pool-"$backend \
         --servers $vm_ip
 done 
@@ -146,7 +146,7 @@ az network application-gateway url-path-map create \
   --gateway-name $appgw \
   --name $appgw_pathmap \
   --paths /images/* \
-  --resource-group $rg \
+  --resource-group $RG \
   --address-pool "backend-pool-images" \
   --default-address-pool appGatewayBackendPool \
   --default-http-settings appGatewayBackendHttpSettings \
@@ -157,7 +157,7 @@ az network application-gateway url-path-map create \
 az network application-gateway url-path-map rule create \
   --gateway-name $appgw \
   --name videoPathRule \
-  --resource-group $rg \
+  --resource-group $RG \
   --path-map-name $appgw_pathmap \
   --paths /video/* \
   --address-pool "backend-pool-video" \
@@ -172,7 +172,7 @@ az network application-gateway url-path-map rule create \
 az network application-gateway rule update \
     --gateway-name $appgw \
     --name "rule1" \
-    --resource-group $rg \
+    --resource-group $RG \
     --rule-type PathBasedRouting \
     --url-path-map $appgw_pathmap \
     --address-pool appGatewayBackendPool \
@@ -181,7 +181,7 @@ az network application-gateway rule update \
 
 # AppGW public ip
 pip_appgw_ip=$(az network public-ip show \
-  --resource-group $rg \
+  --resource-group $RG \
   --name $pip_appgw \
   --query ipAddress \
   --output tsv)
@@ -197,7 +197,7 @@ done
 
 ## OBVIOUSLY: going straight to VM, Wireshark on VM shows origin IP as this PC
 for backend in "${backends[@]}"; do
-    vm_ip=$(az vm show --show-details --resource-group $rg --name $"vm-"$backend --query publicIps --output tsv)
+    vm_ip=$(az vm show --show-details --resource-group $RG --name $"vm-"$backend --query publicIps --output tsv)
     url=$vm_ip"/"$backend"/index.html"
     printf "url: "$url"\n"
     curl $url
@@ -211,14 +211,14 @@ done
 appgw_frontend_port="frontend-port-8080"
 
 az network application-gateway frontend-port create \
-    --resource-group $rg \
+    --resource-group $RG \
     --gateway-name $appgw \
     --port 8080 \
     --name $appgw_frontend_port  
 
 # Create the backend listener, linked to frontend port
 az network application-gateway http-listener create \
-  --resource-group $rg \
+  --resource-group $RG \
   --gateway-name $appgw \
   --name $appgw_listener \
   --frontend-ip appGatewayFrontendIP \

@@ -10,45 +10,45 @@
 ## GOTO: the ROOT of the repo to pick up environment variables from .env file:
 cd ../../../
 ## RUN: login.azcli for .env variables, login and subscription selection
-## ENV VARS: TENANT, SUBSCRIPTION, ORG, LOCATION, PROJECT, RG
+echo $ENV_VARS
 
 ## 1. Create a user-assigned managed identity
 ### We use the Azure CLI to create a user-assigned managed identity in your desired resource group and LOCATION.
 
 ### Local Variables
-mi="${ORG}-mi-${PROJECT}"
-echo "Managed Identity Name: $mi"
 mi_role="Contributor"
 
+## Create Resource Group
+az group create --name $RG --location $LOCATION
+
 ### Create the user-assigned managed identity
-az identity create -g $RG -n $mi -l $LOCATION
+az identity create -g $RG -n $MI -l $LOCATION
 
 ### List existing managed identities in the resource group
 az identity list -g $RG
 
 ### Get the clientId from our managed identity by name
-AZURE_CLIENT_ID=$(az identity list -g $RG --query "[?name=='$mi'].clientId" -o tsv)
-echo "AZURE_CLIENT_ID: "$AZURE_CLIENT_ID
+AZURE_CLIENT_ID=$(az identity list -g $RG --query "[?name=='$MI'].clientId" -o tsv)
+echo "AZURE_CLIENT_ID: $AZURE_CLIENT_ID"
 
 ### Get the tenantId from our managed identity by name
-AZURE_TENANT_ID=$(az identity list -g $RG --query "[?name=='$mi'].tenantId" -o tsv)
-echo "Tenant ID: "$AZURE_TENANT_ID
+AZURE_TENANT_ID=$(az identity list -g $RG --query "[?name=='$MI'].tenantId" -o tsv)
+echo "Tenant ID: $AZURE_TENANT_ID"
 
 #### The managed identity's 'id' field contains the full resource ID like:
 #### /subscriptions/{subscription-id}/resourceGroups/{RG}/providers/Microsoft.ManagedIdentity/userAssignedIdentities/{mi}
 #### Extract subscription ID from the identity's resource ID
 #### cut -d'/' -f3 splits that string by / and takes the 3rd field. 
 #### Because the string starts with /, field 1 is empty, field 2 is subscriptions, and field 3 is the actual subscription ID
-AZURE_SUBSCRIPTION_ID=$(az identity show -g $RG -n $mi --query "id" -o tsv | cut -d'/' -f3)
-echo "Subscription ID: "$AZURE_SUBSCRIPTION_ID
-
+AZURE_SUBSCRIPTION_ID=$(az identity show -g $RG -n $MI --query "id" -o tsv | cut -d'/' -f3)
+echo "Subscription ID: $AZURE_SUBSCRIPTION_ID"
 
 ##############################################################################################
 
 # 2. Assign an appropriate role to your user-assigned managed identity.
 
 ## Get the principal ID of the managed identity
-principalId=$(az identity show -g $RG -n $mi --query principalId -o tsv)
+principalId=$(az identity show -g $RG -n $MI --query principalId -o tsv)
 echo "Principal ID: $principalId"
 
 ## Assign the role at the resource group scope

@@ -21,7 +21,7 @@ az group create \
 
 # create ACA Environment
 az containerapp env create \
-  --name $aca_env \
+  --name $ACA_ENV \
   --resource-group $RG \
   --location $LOCATION
 
@@ -29,7 +29,7 @@ az containerapp env create \
 az containerapp create \
   --name $aca_backend \
   --resource-group $RG \
-  --environment $aca_env \
+  --environment $ACA_ENV \
   --image ghcr.io/houssemdellai/containerapps-album-backend:v1 \
   --target-port 3500 \
   --ingress external
@@ -47,7 +47,7 @@ echo $API_BASE_URL
 az containerapp create \
   --name $aca_frontend \
   --resource-group $RG \
-  --environment $aca_env \
+  --environment $ACA_ENV \
   --image ghcr.io/houssemdellai/containerapps-album-frontend:v1 \
   --target-port 3000 \
   --ingress 'external' \

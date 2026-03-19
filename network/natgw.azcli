@@ -15,11 +15,11 @@ vm="vm-1"
 vm_username="pietronromano"
 
 # Create Resource Group
-az group create --name $rg --location $location
+az group create --name $RG --location $location
 
 # To access the internet, you need one or more public IP addresses for the NAT gateway. 
 az network public-ip create \
-    --resource-group $rg \
+    --resource-group $RG \
     --name $pip_natgw \
     --sku Standard \
     --allocation-method Static \
@@ -28,15 +28,15 @@ az network public-ip create \
 
 # NAT Gateway
 az network nat gateway create \
-    --resource-group $rg \
+    --resource-group $RG \
     --name $natgw \
     --public-ip-addresses $pip \
     --idle-timeout 10
 
 # vnet
 az network vnet create \
-  --name $vnet \
-  --resource-group $rg \
+  --name $VNET \
+  --resource-group $RG \
   --location $location \
   --address-prefix 10.0.0.0/16 \
   --subnet-name $subnet \
@@ -45,36 +45,36 @@ az network vnet create \
 
 # vm: create with NO public ip
 az vm create \
---resource-group $rg \
+--resource-group $RG \
 --name $vm \
 --image Ubuntu2404 \
 --size Standard_D2ds_v6 \
 --admin-username $vm_username \
 --public-ip-address "" \
 --generate-ssh-keys \
---vnet-name $vnet \
+--vnet-name $VNET \
 --subnet $subnet
 
-az vm auto-shutdown -g $rg -n $vm --time 1730 --email "pietronromano@live.com" 
+az vm auto-shutdown -g $RG -n $vm --time 1730 --email "pietronromano@live.com" 
 
 
 # Create Azure Bastion subnet
 az network vnet subnet create \
     --name AzureBastionSubnet \
-    --resource-group $rg \
-    --vnet-name $vnet \
+    --resource-group $RG \
+    --vnet-name $VNET \
     --address-prefix 10.0.2.0/26
 
 ## Associate NAT gateway to subnet
 az network vnet subnet update \
-    --resource-group $rg \
-    --vnet-name $vnet \
+    --resource-group $RG \
+    --vnet-name $VNET \
     --name $subnet \
     --nat-gateway $natgw
 
 # Create public IP address for Bastion host
 az network public-ip create \
-    --resource-group $rg \
+    --resource-group $RG \
     --name $pip_bastion \
     --sku Standard \
     --location $location \
@@ -85,8 +85,8 @@ az network public-ip create \
 az network bastion create \
     --name $bastion \
     --public-ip-address $pip_bastion \
-    --resource-group $rg \
-    --vnet-name $vnet \
+    --resource-group $RG \
+    --vnet-name $VNET \
     --location $location
 
 
@@ -100,7 +100,7 @@ curl ifconfig.me
 curl ifconfig.me
 
 # Delete Resource Group
-az group delete --yes --resource-group $rg
+az group delete --yes --resource-group $RG
 
 
 

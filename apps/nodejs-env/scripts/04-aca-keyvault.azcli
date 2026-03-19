@@ -6,8 +6,7 @@
 ## GOTO: the ROOT of the repo to pick up environment variables from .env file:
 cd ../../../
 ## RUN: login.azcli for .env variables, login and subscription selection
-## ENV VARS: TENANT, SUBSCRIPTION, ORG, LOCATION, PROJECT, RG
-
+echo $ENV_VARS
 # Override: westeurope didn't allow container apps env, because it's "FREE AKS"
 LOCATION=ukwest
 
@@ -27,7 +26,7 @@ secret_name="secret-01"
 ### SEE: identity/managed-identity.azcli for how create a Managed Identity and assign roles
  
 # Get the principal ID of the managed identity
-principalId=$(az identity show -g $RG -n $mi --query principalId -o tsv)
+principalId=$(az identity show -g $RG -n $MI --query principalId -o tsv)
 echo "Principal ID: $principalId"
  
 # Container Registry: SEE 02-nje-docker-acr.azcli in this folder for how to create an ACR and push a Docker image to it from a local Dockerfile
@@ -35,7 +34,7 @@ kv_id=$(az keyvault show --resource-group $RG --name $kv --query id --output tsv
 echo "KeyVault ID: $kv_id"
 
 mi="${ORG}-mi-${PROJECT}"
-mi_id=$(az identity show -g $RG -n $mi --query "id" -o tsv)
+mi_id=$(az identity show -g $RG -n $MI --query "id" -o tsv)
 echo "Managed Identity ID: ${mi_id}"
 
 ## Assign the Key Vault Secrets User role for the KeyVault to the managed identity.
@@ -75,7 +74,7 @@ az containerapp job logs show -n $aca_job --container $aca_job -g $RG --follow
 
 ## Save the Log Analytics workspace ID for the Container Apps environment to a variable.
 LOG_ANALYTICS_WORKSPACE_ID=$(az containerapp env show \
-    --name $aca_env \
+    --name $ACA_ENV \
     --resource-group $RG \
     --query "properties.appLogsConfiguration.logAnalyticsConfiguration.customerId" \
     --output tsv)

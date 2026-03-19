@@ -1,7 +1,9 @@
-# Build Docker Image on ACR and Deploy to Azure Container Apps with Azure CLI
+# Deploy to Azure Container Apps Job, Scale with KEDA
 # DATE: 2026-03-17
 # RESULT: Worked fine!
-
+# NOTE: 
+ - Keda should shutdown all replicas after processing messages and waiting the idle timeout ...
+ - So add "MonitorIdleTimeout" to the Container App Job .Net Code to make sure it scales down to zero after processing messages and waiting the idle timeout
 ##############################################################################################
 
 # Environment Variables
@@ -10,36 +12,27 @@ cd ../../../
 ## RUN: login.azcli for .env variables, login and subscription selection
 echo $ENV_VARS 
 ## Create local variables, note ACR can't have dashes in its name, so we need to remove them
+# PREXISTING: ACR, Container Apps Environment (SEE: aca/aca-acr-env.azcli)
+# ALSO: we reuse the same Container from the Container App Processor
+app="sbprocessor"
 # $ACR is defined in shared .env file 
 tag="v1.0.0"
 acr_repo="${ACR}.azurecr.io/${app}:${tag}"
-app="sbsender"
-host_port="8080"
-container_port="8080"
-target_port=$container_port
-
 mi="${ORG}-mi-${PROJECT}"
-
-# PREXISTING Container Apps Environment, SEE: aca/aca-acr-env.azcli
 aca_env="${ORG}-acaenv-${PROJECT}"
 
-# NOTE! must be less than 32 characters
-aca_app="${ORG}-aca-${PROJECT}-sbsender"
+# NOTE! must be less than 32 characters: CUSTOM here to differentiate from the App
+aca_app="${ORG}-aca-${PROJECT}-sbprokeda"
 echo "ACA App Name: ${aca_app}  Length:${#aca_app}"
 
 ##############################################################################################
 
-## Create the Container App
-### SEE: https://learn.microsoft.com/en-us/azure/container-apps/containerapp-up
-### SEE: https://learn.microsoft.com/en-us/cli/azure/containerapp?view=azure-cli-latest#az-containerapp-up(containerapp)
-### user-assigned: specify the managed identity that we created earlier for ACR access
-### ingress "external": allows acces from VNET, "internal" only allows access from within the Environment
-
+## Create the Container App Job
 mi_id=$(az identity show -g $RG -n $MI --query "id" -o tsv)
 echo "Managed Identity ID: "$mi_id
 
 # Go back to the app folder for the environment variables and secrets
-cd apps/dotnet-service-bus/ServiceBus.Sender
+cd apps/dotnet-service-bus/ServiceBus.Processor
 source .env
 echo "MANAGED_IDENTITY_CLIENT_ID: $MANAGED_IDENTITY_CLIENT_ID"
 echo "SERVICE_BUS_NAMESPACE: $SERVICE_BUS_NAMESPACE"
@@ -53,40 +46,57 @@ echo $secrets
 env_vars="MANAGED_IDENTITY_CLIENT_ID=secretref:managed-identity-client-id"
 env_vars="$env_vars SERVICE_BUS_NAMESPACE=$SERVICE_BUS_NAMESPACE"
 env_vars="$env_vars SERVICE_BUS_QUEUE=$SERVICE_BUS_QUEUE"
+env_vars="$env_vars IDLE_TIMEOUT_MINUTES=$IDLE_TIMEOUT_MINUTES"
 echo $env_vars
 
-az containerapp create \
+# Create the Container App Job with KEDA scaling based on Service Bus Queue length
+# SEE: In Portal, menu "Event-driven scaling" appears after creation
+
+az containerapp job create \
   --name $aca_app \
   --resource-group $RG \
   --environment $ACA_ENV \
   --secrets $secrets \
   --env-vars $env_vars \
-  --target-port $target_port \
-  --ingress external \
   --image $ACR.azurecr.io/$app:$tag \
-  --registry-identity $mi_id \
   --registry-server $ACR.azurecr.io \
-  --user-assigned $mi_id
+  --registry-identity $mi_id \
+  --user-assigned $mi_id \
+  --min-executions 0 \
+  --max-executions 10 \
+  --trigger-type "Event" \
+  --scale-rule-name azure-servicebus-queue-rule \
+  --scale-rule-type azure-servicebus \
+  --scale-rule-identity $mi_id \
+  --scale-rule-metadata "namespace=$SERVICE_BUS_NAMESPACE" \
+                        "queueName=$SERVICE_BUS_QUEUE" \
+                        "messageCount=1"
 
 ### See full details
-az containerapp show -n $aca_app -g $RG
+az containerapp job show -n $aca_app -g $RG
 
-### Get the fqdn 
-aca_fqdn=$(az containerapp show -n $aca_app -g $RG \
-    --query 'properties.configuration.ingress.fqdn' \
-    --output tsv)
-echo "FQDN: $aca_fqdn"
+### NO fqdn as this just listens to the Service Bus, no ingress configured
+## We will test it by sending messages to the Service Bus queue and checking if they are processed correctly by looking at the logs.
 
-### Test the Container App with curl
-### NOTE: the container app can be accessed via http OR https://<>, (HTTP gets redirected to HTTPS)
-### NOTE: Use the URL WITHOUT the target port (which is for the internal container port)
-curl "https://"$aca_fqdn"/send?message=HelloFromCurl&num=10"
+# Put more max-executions to create more replicas when there are many messages in the queue
+# SEE Portal: "Scale" menu of the Container App Job, "Max Executions" setting
+az containerapp job update \
+  --name $aca_app \
+  --resource-group $RG \
+  --max-executions 10
 
 ##############################################################################################
 
-### Debug the Container App
-### Stream Logs
-az containerapp logs show -n $aca_app -g $RG --follow
+# Debug the Container App
+# Stream Logs
+az containerapp job logs show -n $aca_app -g $RG --container $aca_app --follow
+
+# SEE Portal: Execution History: multiple simultaneous execution show
+az containerapp job execution list \
+  --name $aca_app \
+  --resource-group $RG \
+  --query "[].{Name:name, State:properties.state, StartTime:properties.startTime, EndTime:properties.endTime}" \
+  --output table
 
 ### Container Apps Console / Debug: allows connecting to live console
 ### - NOTE: Can do this also from the "Console" item in the Portal, both for Console and Debug
@@ -95,43 +105,14 @@ az containerapp logs show -n $aca_app -g $RG --follow
 ### - DEBUG: https://learn.microsoft.com/en-us/azure/container-apps/container-debug-console?tabs=bash
 ###   - separate container, utils installed, "Common Base Linux Mariner"
 
-az containerapp revision list \
-  --name $aca_app \
-  --resource-group $RG \
-  --query "[].name"
-
-az containerapp replica list \
+az containerapp job replica list \
   --name $aca_app \
   --resource-group $RG \
   --query "[].{Containers:properties.containers[].name, Name:name}"
 
-## GAVE ERROR: DEBUG in a separate container, with the most recent revision
-az containerapp debug \
-  --name $aca_app \
-  --resource-group $RG
 
+## NO EXEC for Container App Jobs, only for regular Container Apps, SEE: https://learn.microsoft.com/en-us/azure/container-apps/container-debug-console?tabs=bash#debug-a-container-app-job --- IGNORE ---
 
-## [In a separate terminal]: Connect to the actual container, most recent revision
-az containerapp exec \
-  --name $aca_app \
-  --resource-group $RG
-
-## Once inside the container: see app contents in this dir:
-cd /proc/1/cwd/
-ls 
-
-## Check dotnet info/  runtime versions (only installed on Container Console, NOT the Debug container)
-dotnet --info
-dotnet --list-runtimes
-
-## See proceses:
-ps aux
-
-## Check environment variables
-printenv
-
-## Exit the container
-exit
 
 ##############################################################################################
 

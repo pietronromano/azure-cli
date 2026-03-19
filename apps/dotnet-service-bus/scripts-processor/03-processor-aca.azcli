@@ -8,32 +8,24 @@
 ## GOTO: the ROOT of the repo to pick up environment variables from .env file:
 cd ../../../
 ## RUN: login.azcli for .env variables, login and subscription selection
-## ENV VARS: TENANT, SUBSCRIPTION, ORG, LOCATION, PROJECT, RG
- 
+echo $ENV_VARS 
 ## Create local variables, note ACR can't have dashes in its name, so we need to remove them
-acr="${ORG}acr${PROJECT//-/}"
-tag="v1.0.0"
-acr_repo="${acr}.azurecr.io/${app}:${tag}"
+# PREXISTING: ACR, Container Apps Environment (SEE: aca/aca-acr-env.azcli)
+# $ACR is defined in shared .env file 
 app="sbprocessor"
-
-
+tag="v1.0.0"
+acr_repo="${ACR}.azurecr.io/${app}:${tag}"
 mi="${ORG}-mi-${PROJECT}"
-
-# PREXISTING Container Apps Environment, SEE: aca/aca-acr-env.azcli
 aca_env="${ORG}-acaenv-${PROJECT}"
 
 # NOTE! must be less than 32 characters
-aca_app="${ORG}-aca-${PROJECT}-sbprocessor"
+aca_app="${ORG}-aca-${PROJECT}-${app}"
+echo "ACA App Name: ${aca_app}  Length:${#aca_app}"
 
 ##############################################################################################
 
-## Create the Container App
-### SEE: https://learn.microsoft.com/en-us/azure/container-apps/containerapp-up
-### SEE: https://learn.microsoft.com/en-us/cli/azure/containerapp?view=azure-cli-latest#az-containerapp-up(containerapp)
-### user-assigned: specify the managed identity that we created earlier for ACR access
-### ingress "external": allows acces from VNET, "internal" only allows access from within the Environment
-
-mi_id=$(az identity show -g $RG -n $mi --query "id" -o tsv)
+## Create the Container App Job
+mi_id=$(az identity show -g $RG -n $MI --query "id" -o tsv)
 echo "Managed Identity ID: "$mi_id
 
 # Go back to the app folder for the environment variables and secrets
@@ -56,12 +48,12 @@ echo $env_vars
 az containerapp create \
   --name $aca_app \
   --resource-group $RG \
-  --environment $aca_env \
+  --environment $ACA_ENV \
   --secrets $secrets \
   --env-vars $env_vars \
-  --image $acr.azurecr.io/$app:$tag \
+  --image $ACR.azurecr.io/$app:$tag \
   --registry-identity $mi_id \
-  --registry-server $acr.azurecr.io \
+  --registry-server $ACR.azurecr.io \
   --user-assigned $mi_id
 
 ### See full details

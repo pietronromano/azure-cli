@@ -36,7 +36,7 @@ sb_namespace_id=$(az servicebus namespace show --resource-group $RG --name $sb_n
 echo "Service Bus Namespace Resource ID: $sb_namespace_id"
 
 ## Get the principal ID of our managed identity in this resource group
-principalId=$(az identity show -g $RG -n $mi --query principalId -o tsv)
+principalId=$(az identity show -g $RG -n $MI --query principalId -o tsv)
 echo "Principal ID: $principalId"
 
 ## Assign the role at the Service Bus namespace scope

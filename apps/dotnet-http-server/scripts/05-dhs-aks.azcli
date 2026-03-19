@@ -9,19 +9,17 @@ cd ../../../
 # RUN: login.azcli to set environment variables, login and subscription selection steps
 # Env Vars: TENANT, SUBSCRIPTION, ORG, LOCATION,PROJECT,RG
 
-# Create the variables, note ACR can't have dashes in its name, so we need to remove them
-clu="${ORG}-aks-${PROJECT}"
-acr="${ORG}acr${PROJECT//-/}"
+# Create the variables
 app="DotNetHttpServer"
 tag="v1.0.0"
 host_port="8080"
 
 ## Attach the ACR created in '02-docker-acr.sh' to the PREVIOUSLY CREATED AKS cluster
-az aks update --name $clu --resource-group $rg --attach-acr $acr
+az aks update --name $AKS_CLU --resource-group $RG --attach-acr $ACR
 
 
 ## Deploying the image from ACR into the AKS cluster
-kubectl run ${app} --image="${acr}.azurecr.io/${app}:${tag}"
+kubectl run ${app} --image="${ACR}.azurecr.io/${app}:${tag}"
 # pod/${app} created
 
 ## Verify the pod deployed successfully (PORTAL: Workloads > Pods)

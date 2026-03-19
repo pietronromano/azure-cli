@@ -40,22 +40,20 @@ docker container logs -f $cnt
 ## GOTO: the ROOT of the repo to pick up environment variables from .env file:
 cd ../../../
 ## RUN: login.azcli for .env variables, login and subscription selection
-## Env Vars: TENANT, SUBSCRIPTION, ORG, LOCATION, PROJECT, RG
-
+echo $ENV_VARS
 ## Create the variables, note ACR can't have dashes in its name, so we need to remove them
-acr="${ORG}acr${PROJECT//-/}"
 tag="v1.0.0"
-acr_repo="${acr}.azurecr.io/${app}:${tag}"
+acr_repo="${ACR}.azurecr.io/${app}:${tag}"
 
 
 ## Prexisting Container Registry: SEE: aca/aca-acr-env.azcli for details on creation
 
 ## Tag locally, then push to ACR as repo
 docker tag $img $acr_repo
-az acr login -n $acr -g $RG
+az acr login -n $ACR -g $RG
 docker push $acr_repo
 
 ## List the created repositories and tags in ACR
-az acr repository list -n $acr  -o table
-az acr repository show-tags -n $acr --repository $app -o table
+az acr repository list -n $ACR  -o table
+az acr repository show-tags -n $ACR --repository $app -o table
 

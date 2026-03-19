@@ -47,7 +47,7 @@ location="northeurope"
 acr=pnraca
 app=DotNetHttpServer
 tag=v1
-acr_repo=$acr.azurecr.io/$app:$tag
+acr_repo=$ACR.azurecr.io/$app:$tag
 target_port=8080
 aca_env="aca-env"
 vnet="vnet-aca"
@@ -98,20 +98,20 @@ http://localhost:80/request
 # Azure Container Registry 
 
 ## Create Resource Group
-az group create --name $rg --location $location
+az group create --name $RG --location $location
 
 ## Create Container Registry
-az acr create -n $acr -g $rg --admin-enabled true --sku Standard
+az acr create -n $ACR -g $RG --admin-enabled true --sku Standard
 
-az acr check-health --name $acr
+az acr check-health --name $ACR
 
 ## Tag locally, then push to ACR as repo
 docker tag $image $acr_repo
-az acr login -n $acr -g $rg
+az acr login -n $ACR -g $RG
 docker push $acr_repo
-az acr repository list -n $acr  -o table
+az acr repository list -n $ACR  -o table
 
-az acr repository show-tags -n $acr --repository $app -o table
+az acr repository show-tags -n $ACR --repository $app -o table
 
 ###################################################################
 
@@ -126,22 +126,22 @@ az provider register --namespace Microsoft.ContainerService
     
 ## Create the VNet and Subnet
 az network vnet create \
-    --resource-group $rg \
-    --name $vnet \
+    --resource-group $RG \
+    --name $VNET \
     --location $location \
     --address-prefix 10.0.0.0/16
          
 az network vnet subnet create \
-    --resource-group $rg \
-    --vnet-name $vnet \
+    --resource-group $RG \
+    --vnet-name $VNET \
     --name $subnet_aca \
     --address-prefixes 10.0.1.0/24 \
     --delegations Microsoft.App/environments
         
 
 subnet_aca_id=$(az network vnet subnet show \
-    --resource-group $rg \
-    --vnet-name $vnet \
+    --resource-group $RG \
+    --vnet-name $VNET \
     --name $subnet_aca \
     --query "id" -o tsv | tr -d '[:space:]')
 
@@ -151,8 +151,8 @@ echo $subnet_aca_id
 - internal-only false: allows access from anywhere (instead of just vnet)
 - internal-only true: just vnet access, but can still use debug console to curl
 az containerapp env create \
-    --name $aca_env \
-    --resource-group $rg \
+    --name $ACA_ENV \
+    --resource-group $RG \
     --location $location \
     --infrastructure-subnet-resource-id $subnet_aca_id \
     --internal-only true
@@ -161,21 +161,21 @@ az containerapp env create \
 - SEE: https://learn.microsoft.com/en-us/azure/container-apps/get-started?tabs=bash
 
 ### Get the ACR login credentials
-acr_username=$(az acr credential show -n $acr -g $rg --query username --output tsv)
+acr_username=$(az acr credential show -n $ACR -g $RG --query username --output tsv)
 echo $acr_username
 
-acr_pwd=$(az acr credential show -n $acr -g $rg --query 'passwords[0].value' --output tsv)
+acr_pwd=$(az acr credential show -n $ACR -g $RG --query 'passwords[0].value' --output tsv)
 echo $acr_pwd
 
 ### Create the Container App
 - ingress external: allows acces from VNET, internal only allows access from within the Environment
 az containerapp up \
   --name $app \
-  --resource-group $rg \
+  --resource-group $RG \
   --location $location \
-  --environment $aca_env \
-  --image $acr.azurecr.io/$app:$tag \
-  --registry-server $acr.azurecr.io \
+  --environment $ACA_ENV \
+  --image $ACR.azurecr.io/$app:$tag \
+  --registry-server $ACR.azurecr.io \
   --registry-username $acr_username \
   --registry-password $acr_pwd \
   --target-port $target_port \
@@ -187,13 +187,13 @@ az containerapp up \
 - Use the URL WITHOUT THE TARGET PORT (which is for the internal container port)
 
 ### Stream Logs
-az containerapp logs show -n $app -g $rg
+az containerapp logs show -n $app -g $RG
 
 ### See full details
-az containerapp show -n $app -g $rg
+az containerapp show -n $app -g $RG
 
 ### Get the fqdn and curl
-aca_fqdn=$(az containerapp show -n $app -g $rg \
+aca_fqdn=$(az containerapp show -n $app -g $RG \
     --query 'properties.configuration.ingress.fqdn' \
     --output tsv)
 
@@ -208,24 +208,24 @@ curl "https://"$aca_fqdn"/request"
 
 az containerapp revision list \
   --name $app \
-  --resource-group $rg \
+  --resource-group $RG \
   --query "[].name"
 
 az containerapp replica list \
   --name $app \
-  --resource-group $rg \
+  --resource-group $RG \
   --revision $app"--0000002" \
   --query "[].{Containers:properties.containers[].name, Name:name}"
 
 #### DEBUG in a separate container, with the most recent revision
 az containerapp debug \
   --name $app \
-  --resource-group $rg
+  --resource-group $RG
 
 #### Connect to the actual container, most recent revision
 az containerapp exec \
   --name $app \
-  --resource-group $rg
+  --resource-group $RG
 
 ### Once inside the container: see app contents in this dir:
 cd /proc/1/cwd/ 
@@ -248,50 +248,50 @@ curl 100.100.200.146:8080/request
 - I created the CLI commands
 
 ## List all private zones in the subscription (NOTE these show separately in the portal from Public DNS zones)
-az network private-dns zone list -g $rg --query "[].{ResourceGroup:resourceGroup, Zone:name}" -o table
+az network private-dns zone list -g $RG --query "[].{ResourceGroup:resourceGroup, Zone:name}" -o table
 
 ## Get the defaultdomain of the ACA Environment, we'll use it to name the zone
 - NOTE: need --output tsv, otherwise returns "" in the value, so not valid as domain name
 defaultDomain=$(az containerapp env show \
-    --name $aca_env \
-    --resource-group $rg \
+    --name $ACA_ENV \
+    --resource-group $RG \
     --query properties.defaultDomain \
     --output tsv)
 echo $defaultDomain
 
 ## Get the staticIP of the ACA Environment, we'll use it as A records
 staticIp=$(az containerapp env show \
-    --name $aca_env \
-    --resource-group $rg \
+    --name $ACA_ENV \
+    --resource-group $RG \
     --query properties.staticIp \
     --output tsv)
 echo $staticIp
 
 ## Create Zone
 az network private-dns zone create \
-  -g $rg \
+  -g $RG \
   -n $defaultDomain
 
 ### Create A Record
 az network private-dns record-set a add-record \
-  -g $rg \
+  -g $RG \
   -z $defaultDomain \
   -n "*" \
   -a $staticIp
 
 ## NOTE: even though uses record-set "a": creates a SOA Record (Start of Authority Record) 
 az network private-dns record-set a add-record \
-  -g $rg \
+  -g $RG \
   -z $defaultDomain \
   -n "@" \
   -a $staticIp
 
 ## Link zone to VNet (-e == --registration-enabled)
 az network private-dns link vnet create \
-    -g $rg \
+    -g $RG \
     -n $dns_link \
     -z $defaultDomain \
-    -v $vnet \
+    -v $VNET \
     -e false
 
 #######################################################
@@ -299,14 +299,14 @@ az network private-dns link vnet create \
 # App Gateway
 ## Create subnet
 az network vnet subnet create \
-    --resource-group $rg \
-    --vnet-name $vnet \
+    --resource-group $RG \
+    --vnet-name $VNET \
     --name $subnet_appgw \
     --address-prefixes 10.0.2.0/24
 
 # AppGW pip
 az network public-ip create \
-  --resource-group $rg \
+  --resource-group $RG \
   --location $location \
   --name $pip_appgw \
   --allocation-method Static \
@@ -316,8 +316,8 @@ az network public-ip create \
 az network application-gateway create \
   --name $appgw \
   --location $location \
-  --resource-group $rg \
-  --vnet-name $vnet \
+  --resource-group $RG \
+  --vnet-name $VNET \
   --subnet $subnet_appgw \
   --capacity 1 \
   --sku Standard_v2 \
@@ -331,7 +331,7 @@ az network application-gateway create \
 # Add new backend pool, linked to defaultDomain as server , but no rules yet
 az network application-gateway address-pool create \
   --gateway-name $appgw \
-  --resource-group $rg \
+  --resource-group $RG \
   --name $appgw_backend \
   --servers $defaultDomain
 
@@ -342,14 +342,14 @@ az network application-gateway address-pool create \
 az network application-gateway rule update \
     --gateway-name $appgw \
     --name "rule1" \
-    --resource-group $rg \
+    --resource-group $RG \
     --address-pool $appgw_backend \
     --priority 200
 
 
 # AppGW public ip
 pip_appgw_ip=$(az network public-ip show \
-  --resource-group $rg \
+  --resource-group $RG \
   --name $pip_appgw \
   --query ipAddress \
   --output tsv)
@@ -373,8 +373,8 @@ Local Error: DNSResolution
 
 ## Create private link subnet
 az network vnet subnet create \
-    --resource-group $rg \
-    --vnet-name $vnet \
+    --resource-group $RG \
+    --vnet-name $VNET \
     --name $subnet_pep \
     --address-prefixes 10.0.4.0/24
 
@@ -385,23 +385,23 @@ az network vnet subnet create \
 ###################################################################
 # Create a Windows VM to do tests on the network
 az network vnet subnet create \
-    --resource-group $rg \
-    --vnet-name $vnet \
+    --resource-group $RG \
+    --vnet-name $VNET \
     --name $subnet_test \
     --address-prefixes 10.0.3.0/24
 
 az vm create \
-    --resource-group $rg \
+    --resource-group $RG \
     --location $location \
     --name $vm \
     --image Win2022Datacenter \
     --size Standard_D2ds_v6 \
     --admin-username $vm_username \
     --admin-password $vm_pwd \
-    --vnet-name $vnet \
+    --vnet-name $VNET \
     --subnet $subnet_test
 
-az vm auto-shutdown -g $rg -n $vm -l $location --time 1730 --email "pietronromano@live.com"
+az vm auto-shutdown -g $RG -n $vm -l $location --time 1730 --email "pietronromano@live.com"
 
 ## Test connectivity directly to ACA
 nslookup <aca_fqdn> # should resolve to private ip address of ACA ENV

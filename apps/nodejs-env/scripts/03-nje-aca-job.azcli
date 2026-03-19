@@ -8,22 +8,21 @@
 ## GOTO: the ROOT of the repo to pick up environment variables from .env file:
 cd ../../../
 ## RUN: login.azcli for .env variables, login and subscription selection
-## ENV VARS: TENANT, SUBSCRIPTION, ORG, LOCATION, PROJECT, RG
-
+echo $ENV_VARS
 # Override: westeurope didn't allow container apps env, because it's "FREE AKS"
 LOCATION=ukwest
 
 ## Create local variables, note ACR can't have dashes in its name, so we need to remove them
 # PREXISTING Container Registry, SEE: aca/aca-acr-env.azcli
-acr="${ORG}acr${PROJECT//-/}"
+# $ACR is defined in shared .env file 
 tag="v1.0.0"
-acr_repo="${acr}.azurecr.io/${app}:${tag}"
+acr_repo="${ACR}.azurecr.io/${app}:${tag}"
 app="nodejsenv"
 aca_env="${ORG}-acaenv-${PROJECT}"
 
-echo "ACR: $acr"
+echo "ACR: $ACR"
 echo "ACR Repo: $acr_repo"
-echo "ACA Environment: $aca_env"
+echo "ACA Environment: $ACA_ENV"
 
 # NOTE! must be less than 32 characters
 aca_job="${ORG}-aca-${PROJECT}-${app}"
@@ -58,7 +57,7 @@ echo $env_vars
 ### user-assigned: specify the managed identity that we created earlier for ACR access
 ### ingress "external": allows acces from VNET, "internal" only allows access from within the Environment
 
-mi_id=$(az identity show -g $RG -n $mi --query "id" -o tsv)
+mi_id=$(az identity show -g $RG -n $MI --query "id" -o tsv)
 echo "Managed Identity ID: ${mi_id}"
 
 # --trigger-type: Schedule | Event | Manual
@@ -67,12 +66,12 @@ echo "Managed Identity ID: ${mi_id}"
 az containerapp job create \
     --name $aca_job \
     --resource-group $RG \
-    --environment $aca_env \
-    --image $acr.azurecr.io/$app:$tag \
+    --environment $ACA_ENV \
+    --image $ACR.azurecr.io/$app:$tag \
     --secrets $secrets \
     --env-vars $env_vars \
     --registry-identity $mi_id \
-    --registry-server $acr.azurecr.io \
+    --registry-server $ACR.azurecr.io \
     --mi-user-assigned $mi_id \
     --trigger-type "Manual" \
     --cpu "1.0" --memory "2.0Gi"
@@ -97,7 +96,7 @@ az containerapp job execution list \
 
 ## Save the Log Analytics workspace ID for the Container Apps environment to a variable.
 LOG_ANALYTICS_WORKSPACE_ID=$(az containerapp env show \
-    --name $aca_env \
+    --name $ACA_ENV \
     --resource-group $RG \
     --query "properties.appLogsConfiguration.logAnalyticsConfiguration.customerId" \
     --output tsv)
@@ -148,6 +147,14 @@ az containerapp exec \
 ### Once inside the container: see app contents in this dir:
 cd /proc/1/cwd/ 
 
+## See proceses:
+ps aux
+
+## Check environment variables
+printenv
+
+## Exit the container
+exit
 
 ##############################################################################################
 

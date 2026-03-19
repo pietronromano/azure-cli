@@ -42,18 +42,18 @@ cd ../../../
 
 ## Prexisting Container Registry: SEE: aca/aca-acr-env.azcli for details on creation
 ## Create the variables, note ACR can't have dashes in its name, so we need to remove them
-acr="${ORG}acr${PROJECT//-/}"
+# $ACR is defined in shared .env file 
 tag="v1.0.0"
-acr_repo="${acr}.azurecr.io/${app}:${tag}"
+acr_repo="${ACR}.azurecr.io/${app}:${tag}"
  
 ## Tag locally, then push to ACR as repo
 docker tag $img $acr_repo
 # NOTE: If you have issues with login, check if the ACR was provisioned correctly in the portal
 # If provisioning fails, use a DIFFERENT name, as it seems to get stuck
-az acr login -n $acr -g $RG 
+az acr login -n $ACR -g $RG 
 docker push $acr_repo
 
 ## List the created repositories and tags in ACR
-az acr repository list -n $acr  -o table
-az acr repository show-tags -n $acr --repository $app -o table
+az acr repository list -n $ACR  -o table
+az acr repository show-tags -n $ACR --repository $app -o table
 

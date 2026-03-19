@@ -27,11 +27,11 @@ aca_env=ccoe-pnrtest-albums-env
 az group create -n $RG -l $LOCATION -o table
 
 # If needed, create ACA environment
-az containerapp env create -n $aca_env -g $RG -l $LOCATION -o table
+az containerapp env create -n $ACA_ENV -g $RG -l $LOCATION -o table
 
 # deploy containerapp using YAML file
 # IMPORTANT: replace the environment resource ID in the YAML file
-ACA_ENVIRONMENT_ID=$(az containerapp env show -n $aca_env -g $RG --query id -o tsv)
+ACA_ENVIRONMENT_ID=$(az containerapp env show -n $ACA_ENV -g $RG --query id -o tsv)
 echo $ACA_ENVIRONMENT_ID
 
 az containerapp create -n $aca_app -g $RG --yaml aca/aca-yml/aca_app.yaml

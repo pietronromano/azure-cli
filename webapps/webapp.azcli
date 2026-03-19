@@ -20,7 +20,7 @@ CTRL+C
 az login --tenant pietronromanolive.onmicrosoft.com
 
 # Private endpoints are available for Windows and Linux apps, containerized or not, hosted on the following App Service plans: Basic, Standard, PremiumV2, PremiumV3, IsolatedV2, Functions Premium (sometimes called the Elastic Premium plan).
-az webapp up --sku S1 --name $appname --os-type $os --location $location --resource-group $rg
+az webapp up --sku S1 --name $appname --os-type $os --location $location --resource-group $RG
 # RESULTS:
 {
   "URL": "http://pnr-eus-myfirstwebapp.azurewebsites.net",
@@ -47,10 +47,10 @@ az webapp up --name $appname --os-type $os
 
 
 # Web App: Get groupId: sites
-az network private-link-resource list -g $rg --type Microsoft.Web/sites -n $appname
+az network private-link-resource list -g $RG --type Microsoft.Web/sites -n $appname
 
 id=$(az webapp list \
-    --resource-group $rg \
+    --resource-group $RG \
     --query '[].[id]' \
     --output tsv)
 echo $id
@@ -66,30 +66,30 @@ az network private-endpoint create \
     --connection-name $connection \
     --name $pe \
     --private-connection-resource-id $id \
-    --resource-group $rg \
+    --resource-group $RG \
     --subnet $subnet \
     --group-id sites \
-    --vnet-name $vnet 
+    --vnet-name $VNET 
 
 # Configure the private DNS zone
 dnszone="privatelink.azurewebsites.net"
 
 # Create a new private Azure DNS zone with az network private-dns zone create.
 az network private-dns zone create \
-    --resource-group $rg \
+    --resource-group $RG \
     --name $dnszone
 
 # Link the DNS zone to the Virtual Network you created previously with az network private-dns link vnet create.
 az network private-dns link vnet create \
-    --resource-group $rg \
+    --resource-group $RG \
     --zone-name $dnszone \
     --name dns-link \
-    --virtual-network $vnet \
+    --virtual-network $VNET \
     --registration-enabled false
 
 # Create a Private Endpoint DNS zone group with az network private-endpoint dns-zone-group create.
 az network private-endpoint dns-zone-group create \
-    --resource-group $rg \
+    --resource-group $RG \
     --endpoint-name $pe \
     --name zone-group \
     --private-dns-zone $dnszone \

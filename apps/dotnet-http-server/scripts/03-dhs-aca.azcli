@@ -6,25 +6,21 @@
 ## GOTO: the ROOT of the repo to pick up environment variables from .env file:
 cd ../../../
 ## RUN: login.azcli for .env variables, login and subscription selection
-## ENV VARS: TENANT, SUBSCRIPTION, ORG, LOCATION, PROJECT, RG
-
+echo $ENV_VARS
 ## Create local variables, note ACR can't have dashes in its name, so we need to remove them
-acr="${ORG}acr${PROJECT//-/}"
 tag="v1.0.0"
-acr_repo="${acr}.azurecr.io/${app}:${tag}"
+acr_repo="${ACR}.azurecr.io/${app}:${tag}"
 app="dotnethttpserver"
 host_port="8080"
 container_port="8080"
 target_port=$container_port
 
-mi="${ORG}-mi-${PROJECT}-${app}"
 
 # PREXISTING Container Apps Environment, SEE: aca/aca-acr-env.azcli
-aca_env="${ORG}-acaenv-${PROJECT}"
 
 # NOTE! must be less than 32 characters
 aca_app="${ORG}-aca-${PROJECT}-httpserver"
-
+echo "Container App Name: $aca_app LENGTH: ${#aca_app}"
 ##############################################################################################
 
 ## Create the Container App
@@ -33,19 +29,18 @@ aca_app="${ORG}-aca-${PROJECT}-httpserver"
 ### user-assigned: specify the managed identity that we created earlier for ACR access
 ### ingress "external": allows acces from VNET, "internal" only allows access from within the Environment
 
-mi_id=$(az identity show -g $RG -n $mi --query "id" -o tsv)
+mi_id=$(az identity show -g $RG -n $MI --query "id" -o tsv)
 echo "Managed Identity ID: "$mi_id
 
-az containerapp up \
+az containerapp create \
   --name $aca_app \
   --resource-group $RG \
-  --LOCATION $LOCATION \
-  --environment $aca_env \
+  --environment $ACA_ENV \
   --target-port $target_port \
   --ingress external \
-  --image $acr.azurecr.io/$app:$tag \
+  --image $ACR.azurecr.io/$app:$tag \
   --registry-identity $mi_id \
-  --registry-server $acr.azurecr.io \
+  --registry-server $ACR.azurecr.io \
   --user-assigned $mi_id
 
 ### See full details

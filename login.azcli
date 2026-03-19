@@ -3,11 +3,16 @@
 ## References:
 - https://learn.microsoft.com/en-gb/cli/azure/authenticate-azure-cli-interactively?view=azure-cli-latest
 
-## Get environment variables from .env file
-echo "CURRENT DIRECTORY: $(pwd)"
-source .env
-echo "ENVIRONMENT VARIABLES: TENANT:$TENANT, SUBSCRIPTION:$SUBSCRIPTION, ORG:$ORG, LOCATION:$LOCATION, PROJECT:$PROJECT, RG:$RG"
+# Get environment variables from .env file: we use absolute path to avoid issues with relative paths when running the script from different locations.
+## NOTE! POSSIBLE ERROR: An environment file is configured but terminal environment injection is disabled. 
+## Enable "python.terminal.useEnvFile" to use environment variables from .env files in terminals.
 
+clear
+echo "CURRENT DIRECTORY: $(pwd)"
+source /Users/macbookpro/dev/azure/github/azure-cli/.env
+ENV_VARS="TENANT:$TENANT, SUBSCRIPTION:$SUBSCRIPTION, ORG:$ORG, LOCATION:$LOCATION, PROJECT:$PROJECT, RG:$RG " 
+ENV_VARS="$ENV_VARS, ACR:$ACR SA:$SA MI:$MI ACA_ENV:$ACA_ENV AKS_CLU:$AKS_CLU VNET:$VNET LAW:$LAW"
+echo "ENV_VARS: $ENV_VARS"
 
 # Check Azure CLI version
 az version
@@ -23,7 +28,7 @@ az login --tenant $TENANT
 # Set a specific Subscription
 az account set -s $SUBSCRIPTION
 
-# From an Azure VM: Sign in with a user-assigned managed identity with --client-id, --object-id, or --resource-id
+# Azure VM: From a command prompt inside the VM, sign in with a user-assigned managed identity with --client-id, --object-id, or --resource-id
 # SEE: https://learn.microsoft.com/en-us/cli/azure/authenticate-azure-cli-managed-identity?view=azure-cli-latest
 az login --identity --identity --object-id <object_id>
 
@@ -31,6 +36,6 @@ az login --identity --identity --object-id <object_id>
 # See the full list of available regions 
 az account list-locations -o table
  
-# Example: Set / list local defaults
-az configure --defaults "group=${RG}" web=myweb vm=myvm
-az configure --defaults --list-defaults -l
+# Set / list local defaults
+az configure --defaults group=$RG location=$LOCATION 
+az configure --list-defaults -l

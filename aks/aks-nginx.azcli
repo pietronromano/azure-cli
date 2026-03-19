@@ -23,8 +23,7 @@ az aks install-cli
 ## Env Vars: TENANT, SUBSCRIPTION, ORG, LOCATION,PROJECT,RG
 
 ## Create the variables, note ACR can't have dashes in its name, so we need to remove them
-clu="${ORG}-aks-${PROJECT}"
-acr="${ORG}acr${PROJECT//-/}"
+# $ACR is defined in shared .env file 
 app="DotNetHttpServer"
 tag="v1.0.0"
 host_port="8080"
@@ -34,12 +33,12 @@ az provider show --namespace Microsoft.ContainerService --query registrationStat
 az provider register --namespace Microsoft.ContainerService
 
 # Create a Resource Group
-az group create --name $rg --location $location
+az group create --name $RG --location $location
 
 # Create a Cluster: SKU: Base, Pricing tier: Free, One node, System-Assigned managed identity, 
 az aks create \
-    --resource-group $rg \
-    --name $clu \
+    --resource-group $RG \
+    --name $AKS_CLU \
     --node-count 1 \
     --generate-ssh-keys \
     --location $location
@@ -49,7 +48,7 @@ az aks create \
 
 
 # Connect to the cluster
-az aks get-credentials --resource-group $rg --name $clu --overwrite-existing
+az aks get-credentials --resource-group $RG --name $AKS_CLU --overwrite-existing
 
 
 # Check that the connection was successfull by listing the nodes and pods inside the cluster:

@@ -50,7 +50,7 @@ app.MapGet("/env-vars", () =>
 // GET endpoint: returns a version number: use to verify deployment has succeeded after updates
 app.MapGet("/version", () =>
 {
-  return "v1.0.0";
+  return "v2.0.0";
 });
 
 // GET endpoint: returns request info as JSON

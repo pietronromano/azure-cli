@@ -13,26 +13,26 @@ bastion_pip="pip-bastion"
 
 # Create a bastion public IP address
 az network public-ip create \
-    --resource-group $rg  \
+    --resource-group $RG  \
     --name $bastion_pip \
     --sku Standard \
     --zone 1 2 3
 
 # Create a bastion subnet
 az network vnet subnet create \
-    --resource-group $rg  \
+    --resource-group $RG  \
     --name AzureBastionSubnet \
-    --vnet-name $vnet \
+    --vnet-name $VNET \
     --address-prefixes 10.1.2.0/27
 
 # Create the bastion host: It can take a few minutes for the Azure Bastion host to deploy.
 az config set extension.use_dynamic_install=yes_without_prompt
 
 az network bastion create \
-    --resource-group $rg  \
+    --resource-group $RG  \
     --name $bastion_host \
     --public-ip-address $bastion_pip \
-    --vnet-name $vnet \
+    --vnet-name $VNET \
     --location $location
 
 

@@ -20,13 +20,13 @@ zone="private.contoso.com"
 
 
 # Create RG
-az group create --name $rg --location $location
+az group create --name $RG --location $location
 
 
 #VNet1
 az network vnet create \
   --name $vnet1 \
-  --resource-group $rg \
+  --resource-group $RG \
   --location $location \
   --address-prefix 10.1.0.0/16 \
   --subnet-name $subnet1 \
@@ -34,7 +34,7 @@ az network vnet create \
 
 az network vnet subnet create \
     --name $subnet2 \
-    --resource-group $rg \
+    --resource-group $RG \
     --vnet-name $vnet1 \
     --address-prefixes 10.1.2.0/24
 
@@ -45,7 +45,7 @@ az vm create \
  -n $vm1 \
  --admin-username $vm_username \
  --admin-password $vm_pwd \
- -g $rg \
+ -g $RG \
  -l $location \
  --subnet $subnet1 \
  --vnet-name $vnet1 \
@@ -54,14 +54,14 @@ az vm create \
  --image win2022datacenter \
  --size Standard_D2ds_v6 
 
-az vm auto-shutdown -g $rg -n $vm1 --time 1730 --email "pietronromano@live.com"
+az vm auto-shutdown -g $RG -n $vm1 --time 1730 --email "pietronromano@live.com"
 
 ## VM2, in subnet2
 az vm create \
  -n $vm2 \
  --admin-username $vm_username \
  --admin-password $vm_pwd \
- -g $rg \
+ -g $RG \
  -l $location \
  --subnet $subnet2 \
  --vnet-name $vnet1 \
@@ -70,7 +70,7 @@ az vm create \
  --image win2022datacenter \
  --size Standard_D2ds_v6 
 
- az vm auto-shutdown -g $rg -n $vm2 --time 1730 --email "pietronromano@live.com"
+ az vm auto-shutdown -g $RG -n $vm2 --time 1730 --email "pietronromano@live.com"
 
 # Remote into VMs, before adding the private zone
 - VM1 and VM2 can resolve dns names, as they're in the same VNet
@@ -87,7 +87,7 @@ nslookup 10.1.2.4
 #VNet2
 az network vnet create \
   --name $vnet2 \
-  --resource-group $rg \
+  --resource-group $RG \
   --location $location \
   --address-prefix 10.2.0.0/16 \
   --subnet-name $subnet1 \
@@ -98,7 +98,7 @@ az vm create \
  -n $vmvnet2 \
  --admin-username $vm_username \
  --admin-password $vm_pwd \
- -g $rg \
+ -g $RG \
  -l $location \
  --subnet $subnet1 \
  --vnet-name $vnet2 \
@@ -107,7 +107,7 @@ az vm create \
  --image win2022datacenter \
  --size Standard_D2ds_v6 
 
- az vm auto-shutdown -g $rg -n $vmvnet2 --time 1730 --email "pietronromano@live.com"
+ az vm auto-shutdown -g $RG -n $vmvnet2 --time 1730 --email "pietronromano@live.com"
 
 
 # Remote into VMs, before adding the private zone
@@ -126,12 +126,12 @@ nslookup 10.2.1.4
 az network private-dns zone list --query "[].{ResourceGroup:resourceGroup, Zone:name}" -o table
 
 ## Create Zone
-az network private-dns zone create -g $rg \
+az network private-dns zone create -g $RG \
    -n $zone
 
 ## Link zone to VNet1
 az network private-dns link vnet create \
-    -g $rg \
+    -g $RG \
     -n $dns_link_vnet1 \
     -z $zone \
     -v $vnet1 \
@@ -139,7 +139,7 @@ az network private-dns link vnet create \
 
 ## Link zone to VNet2: should now allow vm1 to set vm in vnet2
 az network private-dns link vnet create \
-    -g $rg \
+    -g $RG \
     -n $dns_link_vnet2 \
     -z $zone \
     -v $vnet2 \
@@ -147,7 +147,7 @@ az network private-dns link vnet create \
 
 # Create a dns record for vm1, call it vm1db
 az network private-dns record-set a add-record \
-  -g $rg \
+  -g $RG \
   -z $zone \
   -n vm1db \
   -a 10.1.1.4
@@ -156,7 +156,7 @@ az network private-dns record-set a add-record \
 
 # list the DNS records in your zone, run:
 az network private-dns record-set list \
-  -g $rg \
+  -g $RG \
   -z $zone
 
 # Configure vms to allow ICMP

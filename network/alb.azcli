@@ -33,13 +33,13 @@ vm_test="vm-test"
 vm_test_nic="nic-vm-test"
 
 # Create RG
-az group create --name $rg --location $location
+az group create --name $RG --location $location
 
 
 #VNet
 az network vnet create \
-  --name $vnet \
-  --resource-group $rg \
+  --name $VNET \
+  --resource-group $RG \
   --location $location \
   --address-prefix 10.1.0.0/16 \
   --subnet-name $subnet \
@@ -48,10 +48,10 @@ az network vnet create \
 
 # Create an internal load balancer with az network lb create.
 az network lb create \
-    --resource-group $rg \
+    --resource-group $RG \
     --name $alb \
     --sku Standard \
-    --vnet-name $vnet \
+    --vnet-name $VNET \
     --subnet $subnet \
     --backend-pool-name $alb_backend_pool \
     --frontend-ip-name $alb_frontend_ip
@@ -59,7 +59,7 @@ az network lb create \
 
 ## ALB Health Probe
 az network lb probe create \
-    --resource-group $rg \
+    --resource-group $RG \
     --lb-name $alb \
     --name $alb_health_probe \
     --protocol tcp \
@@ -67,7 +67,7 @@ az network lb probe create \
 
 ## ALB Rule
  az network lb rule create \
-    --resource-group $rg \
+    --resource-group $RG \
     --lb-name $alb \
     --name $alb_http_rule \
     --protocol tcp \
@@ -83,12 +83,12 @@ az network lb probe create \
 ## Create a network security group
 ### For a standard load balancer, the VMs in the backend pool are required to have network interfaces that belong to a network security group.
 az network nsg create \
-    --resource-group $rg \
+    --resource-group $RG \
     --name $nsg
 
 ### Create a network security group rule
 az network nsg rule create \
-    --resource-group $rg \
+    --resource-group $RG \
     --nsg-name $nsg \
     --name $nsg_http_rule \
     --protocol '*' \
@@ -106,9 +106,9 @@ array=($nic_vm1 $nic_vm2)
 for vmnic in "${array[@]}"
 do
 az network nic create \
-    --resource-group $rg \
+    --resource-group $RG \
     --name $vmnic \
-    --vnet-name $vnet \
+    --vnet-name $VNET \
     --subnet $subnet \
     --network-security-group $nsg
 done
@@ -123,7 +123,7 @@ do
     --nics $nic_prefix$n \
     --admin-username $vm_username \
     --admin-password $vm_pwd \
-    --resource-group $rg \
+    --resource-group $RG \
     --location $location \
     --image win2022datacenter \
     --size Standard_D2ds_v6 \
@@ -133,7 +133,7 @@ done
 array=(1 2)
 for n in "${array[@]}"
 do
-    az vm auto-shutdown -g $rg -n $vm_prefix$n --time 1730 --email "pietronromano@live.com"
+    az vm auto-shutdown -g $RG -n $vm_prefix$n --time 1730 --email "pietronromano@live.com"
 done
 
 ## Install IIS
@@ -146,7 +146,7 @@ do
     --version 1.8 \
     --name CustomScriptExtension \
     --vm-name $vm_prefix$n \
-    --resource-group $rg \
+    --resource-group $RG \
     --settings '{"commandToExecute":"powershell Add-WindowsFeature Web-Server; powershell Add-Content -Path \"C:\\inetpub\\wwwroot\\Default.htm\" -Value $($env:computername)"}'
 done
 
@@ -158,7 +158,7 @@ do
     --address-pool $alb_backend_pool \
     --ip-config-name ipconfig1 \
     --nic-name $nic_prefix$n \
-    --resource-group $rg \
+    --resource-group $RG \
     --lb-name $alb
 done
 
@@ -168,14 +168,14 @@ done
 
 ## Create public IP
 az network public-ip create \
-    --resource-group $rg \
+    --resource-group $RG \
     --name $natgw_pip \
     --sku Standard \
     --zone 1 2 3
 
 ## Create NAT gateway resource
 az network nat gateway create \
-    --resource-group $rg \
+    --resource-group $RG \
     --name $natgw \
     --public-ip-addresses $natgw_pip \
     --idle-timeout 10
@@ -183,8 +183,8 @@ az network nat gateway create \
 ## Associate NAT gateway with subnet
 ### Configure the source subnet in virtual network to use a specific NAT gateway resource with az network vnet subnet update.
 az network vnet subnet update \
-    --resource-group $rg \
-    --vnet-name $vnet \
+    --resource-group $RG \
+    --vnet-name $VNET \
     --name $subnet \
     --nat-gateway $natgw
 
@@ -193,21 +193,21 @@ az network vnet subnet update \
 # Create test virtual machine
 
 az network nic create \
-    --resource-group $rg \
+    --resource-group $RG \
     --name $vm_test_nic \
-    --vnet-name $vnet \
+    --vnet-name $VNET \
     --subnet $subnet \
     --network-security-group $nsg
 
 # Create the virtual machine with az vm create.
 az vm create \
-    --resource-group $rg \
+    --resource-group $RG \
     --name $vm_test \
     --nics $vm_test_nic \
     --image Win2019Datacenter \
     --admin-username $vm_username \
     --admin-password $vm_pwd \
-    --resource-group $rg \
+    --resource-group $RG \
     --location $location \
     --image win2022datacenter \
     --size Standard_D2ds_v6
@@ -219,4 +219,4 @@ curl 10.1.1.4
 
 
  # Delete Resource Group
-az group delete --yes --resource-group $rg
+az group delete --yes --resource-group $RG

@@ -20,7 +20,6 @@ dotnet publish
 ## Run the app
 dotnet run
 
-
 ## New Terminal: using preconfigured port 5087
 curl http://localhost:5087/
 

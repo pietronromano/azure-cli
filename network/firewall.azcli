@@ -21,12 +21,12 @@ fw_rt_route="fw-rt-route"
 fw_app_rule="fw-app-rule-01"
 
 # Create resource group
-az group create --name $rg --location $location
+az group create --name $RG --location $location
 
 # Create vnet
 az network vnet create \
-  --name $vnet \
-  --resource-group $rg \
+  --name $VNET \
+  --resource-group $RG \
   --location $location \
   --address-prefix 10.0.0.0/16 \
   --subnet-name AzureFirewallSubnet \
@@ -36,47 +36,47 @@ az network vnet create \
 # Create the subnets
 az network vnet subnet create \
     --name $subnet_workload \
-    --resource-group $rg \
-    --vnet-name $vnet \
+    --resource-group $RG \
+    --vnet-name $VNET \
     --address-prefixes 10.0.2.0/24
 
 az network vnet subnet create \
     --name $subnet_jump \
-    --resource-group $rg \
-    --vnet-name $vnet \
+    --resource-group $RG \
+    --vnet-name $VNET \
     --address-prefixes 10.0.3.0/24
 
 
 # Create virtual machines
 ## Create the jump virtual machine.
 az vm create \
-    --resource-group $rg \
+    --resource-group $RG \
     --name $vm_jump \
     --location $location \
     --image Win2022AzureEditionCore \
     --size Standard_D2ds_v6 \
-    --vnet-name $vnet \
+    --vnet-name $VNET \
     --subnet $subnet_jump \
     --admin-username pietronromano \
     --admin-password Axml-xsl0123
 
-az vm open-port --port 3389 --resource-group $rg --name $vm_jump
-az vm auto-shutdown -g $rg -n $vm_jump --time 1900 --email "pietronromano@live.com" 
+az vm open-port --port 3389 --resource-group $RG --name $vm_jump
+az vm auto-shutdown -g $RG -n $vm_jump --time 1900 --email "pietronromano@live.com" 
 
 # Start / Stop
-az vm start -g $rg -n $vm_jump
+az vm start -g $RG -n $vm_jump
 # NOTE STOP: It will continue to be billed. To deallocate a VM, run: az vm deallocate.
-az vm stop -g $rg -n $vm_jump
-az vm deallocate -g $rg -n $vm_jump
+az vm stop -g $RG -n $vm_jump
+az vm deallocate -g $RG -n $vm_jump
 
 # NOTE: Gives ERROR 
 #    -  "Please make sure that the referenced resource exists, and that both resources are in the same region.azcli"
 #    -  but seems to create the NIC
 # Create a NIC for workload vm with specific DNS server IP addresses and no public IP address to test with
 az network nic create \
-    -g $rg \
+    -g $RG \
     -n $nic_workload \
-   --vnet-name $vnet \
+   --vnet-name $VNET \
    --subnet $subnet_workload \
    --location $location \
    --public-ip-address "" \
@@ -85,7 +85,7 @@ az network nic create \
 
 # Now create the workload virtual machine.
 az vm create \
-    --resource-group $rg \
+    --resource-group $RG \
     --name $vm_workload \
     --location $location \
     --image Win2022AzureEditionCore \
@@ -94,18 +94,18 @@ az vm create \
     --admin-username pietronromano \
     --admin-password Axml-xsl0123
 
-az vm auto-shutdown -g $rg -n $vm_workload --time 1900 --email "pietronromano@live.com" 
+az vm auto-shutdown -g $RG -n $vm_workload --time 1900 --email "pietronromano@live.com" 
 
 
 # Now deploy the firewall into the virtual network.
 az network firewall create \
     --name $fw \
-    --resource-group $rg \
+    --resource-group $RG \
     --location $location
 
 az network public-ip create \
     --name $pip_fw \
-    --resource-group $rg \
+    --resource-group $RG \
     --location $location \
     --allocation-method static \
     --sku standard
@@ -114,34 +114,34 @@ az network firewall ip-config create \
     --firewall-name $fw \
     --name $fw_ip_config \
     --public-ip-address $pip_fw \
-    --resource-group $rg \
-    --vnet-name $vnet
+    --resource-group $RG \
+    --vnet-name $VNET
 
 az network firewall update \
     --name $fw \
-    --resource-group $rg
+    --resource-group $RG
 
 fw_pub_addr="$(az network public-ip show \
     --name $pip_fw \
-    --resource-group $rg \
+    --resource-group $RG \
     --query 'ipAddress' \
     --output tsv)"
 echo $fw_pub_addr
 
-fw_priv_addr="$(az network firewall ip-config list -g $rg -f $fw --query "[?name=='$fw_ip_config'].privateIpAddress" --output tsv)"
+fw_priv_addr="$(az network firewall ip-config list -g $RG -f $fw --query "[?name=='$fw_ip_config'].privateIpAddress" --output tsv)"
 echo $fw_priv_addr
 
 # Create a default route
 ## Create a route table, with BGP route propagation disabled
 az network route-table create \
     --name $fw_rt_table \
-    --resource-group $rg \
+    --resource-group $RG \
     --location $location \
     --disable-bgp-route-propagation true
 
 # Create the route to the Firewall private address
 az network route-table route create \
-  --resource-group $rg \
+  --resource-group $RG \
   --name $fw_rt_route \
   --route-table-name $fw_rt_table \
   --address-prefix 0.0.0.0/0 \
@@ -151,8 +151,8 @@ az network route-table route create \
 # Associate the route table to the workload subnet
 az network vnet subnet update \
     -n $subnet_workload \
-    -g $rg \
-    --vnet-name $vnet \
+    -g $RG \
+    --vnet-name $VNET \
     --address-prefixes 10.0.2.0/24 \
     --route-table $fw_rt_table
 
@@ -163,7 +163,7 @@ az network firewall application-rule create \
    --firewall-name $fw \
    --name Allow-Microsoft \
    --protocols Http=80 Https=443 \
-   --resource-group $rg \
+   --resource-group $RG \
    --target-fqdns www.microsoft.com \
    --source-addresses 10.0.2.0/24 \
    --priority 200 \
@@ -180,7 +180,7 @@ az network firewall network-rule create \
    --firewall-name $fw \
    --name Allow-DNS \
    --protocols UDP \
-   --resource-group $rg \
+   --resource-group $RG \
    --priority 200 \
    --source-addresses 10.0.2.0/24 \
    --action Allow
@@ -188,7 +188,7 @@ az network firewall network-rule create \
 # Test the firewall
 ## Note the private IP address for the workload virtual machine:
 az vm list-ip-addresses \
--g $rg \
+-g $RG \
 -n $vm_workload \
 --query "[].virtualMachine.network.privateIpAddresses[0]" \
 --output tsv

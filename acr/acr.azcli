@@ -1,0 +1,54 @@
+# Generic script to create An Azure Container Registry
+
+# Pre-requisites: RUN: identity/managed-identity.azcli
+- Resource Group
+- Managed Identity
+
+
+##############################################################################################
+# Environment Variables
+## GOTO: the ROOT of the repo to pick up environment variables from .env file:
+cd ../../../
+## RUN: login.azcli for .env variables, login and subscription selection
+echo $ENV_VARS
+
+##############################################################################################
+
+## Create Container Registry
+az acr create -n $ACR -g $RG --admin-enabled false --sku Standard
+
+az acr show -n $ACR -g $RG
+
+az acr check-health --name $ACR
+
+# IF NEEDED: Assign AcrPush role to your user
+az role assignment create --assignee $(az ad signed-in-user show --query id -o tsv) \
+  --role AcrPush --scope $(az acr show -n $ACR -g $RG --query id -o tsv)
+
+
+##############################################################################################
+
+
+# Managed identity for our Container App to pull from ACR
+## SEE: identity/managed-identity.azcli for how create a Managed Identity
+
+# Get the principal ID of the managed identity in this resource group
+principalId=$(az identity show -g $RG -n $MI --query principalId -o tsv)
+echo "Principal ID: $principalId"
+
+acr_id=$(az acr show --resource-group $RG --name $ACR --query id --output tsv)
+echo "ACR ID: $acr_id"
+
+## Assign the AcrPull role for the Azure Container Registry to the managed identity.
+az role assignment create \
+  --assignee $principalId \
+  --role "AcrPull" \
+  --scope $acr_id
+
+# Verify the role assignment
+az role assignment list \
+  --assignee $principalId \
+  --scope $acr_id \
+  --output table
+
+##############################################################################################

@@ -9,11 +9,28 @@ public class ServiceBusUtil
     private readonly ServiceBusSender _sender;
     private readonly ServiceBusProcessor _processor;
     private readonly Logger _logger;
+    private DateTime _lastMessageTime;
+    private readonly TimeSpan _idleTimeout;
+    private CancellationTokenSource? _shutdownCts;
    
 
     public ServiceBusUtil()
     {
         _logger = new Logger();
+
+        // Configure idle timeout (default 5 minutes, configurable via environment variable)
+        string? idleTimeoutMinutes = Environment.GetEnvironmentVariable("IDLE_TIMEOUT_MINUTES");
+
+
+        if(String.IsNullOrEmpty(idleTimeoutMinutes))
+        {
+            _logger.Write("Missing environment variables: IDLE_TIMEOUT_MINUTES is not set. Please check configuration. Exiting message processing..");
+            return;
+        }
+
+        _idleTimeout = int.TryParse(idleTimeoutMinutes, out int timeout) 
+            ? TimeSpan.FromMinutes(timeout) 
+            : TimeSpan.FromMinutes(5);
 
         // The Service Bus client types are safe to cache and use as a singleton for the lifetime
         // of the application, which is best practice when messages are being published or read regularly.
@@ -28,12 +45,6 @@ public class ServiceBusUtil
         {
             string? connectionString = Environment.GetEnvironmentVariable("SERVICE_BUS_CONNECTION_STRING");
             string? serviceBusQueue = Environment.GetEnvironmentVariable("SERVICE_BUS_QUEUE");
-
-            if(String.IsNullOrEmpty(serviceBusQueue))
-            {
-                _logger.Write("Missing environment variables: Service Bus queue name is not set. Please check configuration");
-                return;
-            }
 
             // Use connection string for local development if provided
             if (!string.IsNullOrEmpty(connectionString))
@@ -122,7 +133,13 @@ public class ServiceBusUtil
             {
                 string notInitializedMessage = "Service Bus Processor is not initialized. Please check previous log messages for errors during initialization.";
                 _logger.Write(notInitializedMessage);
+                return;
             }
+            
+            // Initialize last message time
+            _lastMessageTime = DateTime.UtcNow;
+            _shutdownCts = new CancellationTokenSource();
+            
             // add handler to process messages
             _processor.ProcessMessageAsync += MessageHandler;
 
@@ -131,12 +148,41 @@ public class ServiceBusUtil
 
             // start processing 
             await _processor.StartProcessingAsync();
+            _logger.Write($"Started processing messages. Will shut down after {_idleTimeout.TotalMinutes} minutes of inactivity.");
+
+            // Monitor for idle timeout
+            await MonitorIdleTimeout(_shutdownCts.Token);
 
         }
         catch (Exception ex)
         {
             string errorMessage = $"An error occurred while processing messages: {ex.Message}";
             _logger.Write(errorMessage);      
+        }
+        finally
+        {
+            // Clean shutdown
+            if (_processor != null && _processor.IsProcessing)
+            {
+                await _processor.StopProcessingAsync();
+                _logger.Write("Processor stopped.");
+            }
+        }
+    }
+
+    private async Task MonitorIdleTimeout(CancellationToken cancellationToken)
+    {
+        while (!cancellationToken.IsCancellationRequested)
+        {
+            await Task.Delay(TimeSpan.FromSeconds(30), cancellationToken);
+            
+            var idleTime = DateTime.UtcNow - _lastMessageTime;
+            if (idleTime >= _idleTimeout)
+            {
+                _logger.Write($"No messages received for {idleTime.TotalMinutes:F1} minutes. Shutting down...");
+                _shutdownCts?.Cancel();
+                break;
+            }
         }
     }
 
@@ -145,6 +191,9 @@ public class ServiceBusUtil
     {
         string body = args.Message.Body.ToString();
         _logger.Write($"ProcessMessages: {body}");
+
+        // Update last message time
+        _lastMessageTime = DateTime.UtcNow;
 
         // complete the message. message is deleted from the queue. 
         await args.CompleteMessageAsync(args.Message);

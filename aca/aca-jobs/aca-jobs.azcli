@@ -22,11 +22,11 @@ aca_env=ccoe-pnrtest-albums-env
 az group create --name $RG --location $LOCATION -o table
 
 # Create Container Apps environment
-az containerapp env create --name $aca_env --resource-group $RG --location $LOCATION -o table
+az containerapp env create --name $ACA_ENV --resource-group $RG --location $LOCATION -o table
 
 # 2. Create and run a manual job
 az containerapp job create `
-    --name $ACA_JOB --resource-group $RG  --environment $aca_env `
+    --name $ACA_JOB --resource-group $RG  --environment $ACA_ENV `
     --trigger-type "Manual" `
     --replica-timeout 1800 --replica-retry-limit 1 --replica-completion-count 1 --parallelism 1 `
     --image "mcr.microsoft.com/k8se/quickstart-jobs:latest" `
@@ -51,7 +51,7 @@ az containerapp job execution list `
 # Save the Log Analytics workspace ID for the Container Apps environment to a variable.
 
 $LOG_ANALYTICS_WORKSPACE_ID=$(az containerapp env show `
-    --name $aca_env `
+    --name $ACA_ENV `
     --resource-group $RG `
     --query "properties.appLogsConfiguration.logAnalyticsConfiguration.customerId" `
     --output tsv)
@@ -74,7 +74,7 @@ az monitor log-analytics query `
 # 6. Create and run a scheduled job
 
 az containerapp job create `
-    --name $ACA_JOB"-scheduled" --resource-group $RG --environment $aca_env `
+    --name $ACA_JOB"-scheduled" --resource-group $RG --environment $ACA_ENV `
     --trigger-type "Schedule" `
     --replica-timeout 1800 --replica-retry-limit 1 --replica-completion-count 1 --parallelism 1 `
     --image "mcr.microsoft.com/k8se/quickstart-jobs:latest" `

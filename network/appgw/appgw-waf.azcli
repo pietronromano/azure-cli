@@ -18,12 +18,12 @@ storacc="pnrwafnesa1"
 
 
 # Create Resource Group
-az group create --name $rg --location $location
+az group create --name $RG --location $location
 
 # vnet
 az network vnet create \
-  --name $vnet \
-  --resource-group $rg \
+  --name $VNET \
+  --resource-group $RG \
   --location $location \
   --address-prefix 10.0.0.0/16 \
   --subnet-name $sbn_backend \
@@ -31,12 +31,12 @@ az network vnet create \
 
 az network vnet subnet create \
   --name $sbn_appgw \
-  --resource-group $rg \
-  --vnet-name $vnet \
+  --resource-group $RG \
+  --vnet-name $VNET \
   --address-prefix 10.0.2.0/24
 
 az network public-ip create \
-  --resource-group $rg \
+  --resource-group $RG \
   --name $pip_appgw \
   --allocation-method Static \
   --sku Standard
@@ -49,25 +49,25 @@ cloud_init="cloud-init.txt"
 cat $cloud_init
 # vm_video
 az vm create \
---resource-group $rg \
+--resource-group $RG \
 --name $vm_video \
 --image Ubuntu2404 \
 --size Standard_D2ds_v6 \
 --admin-username pietronromano \
 --custom-data $cloud_init \
 --generate-ssh-keys \
---vnet-name $vnet \
+--vnet-name $VNET \
 --subnet $sbn_backend
 
 # Open port 80 (default-allow-ssh 22 is created by default)
-az vm open-port --port 80 --resource-group $rg --name $vm_video --priority 200
+az vm open-port --port 80 --resource-group $RG --name $vm_video --priority 200
 
-az vm auto-shutdown -g $rg -n $vm_video --time 1730 --email "pietronromano@live.com" 
+az vm auto-shutdown -g $RG -n $vm_video --time 1730 --email "pietronromano@live.com" 
 # Use JMESPath query
-vm_video_private_ip=$(az vm list-ip-addresses -g $rg -n $vm_video  --query "[].virtualMachine.network.privateIpAddresses[0]" --output tsv)
+vm_video_private_ip=$(az vm list-ip-addresses -g $RG -n $vm_video  --query "[].virtualMachine.network.privateIpAddresses[0]" --output tsv)
 echo $vm_video_private_ip
 
-vm_video_public_ip=$(az vm show --show-details --resource-group $rg --name $vm_video --query publicIps --output tsv)
+vm_video_public_ip=$(az vm show --show-details --resource-group $RG --name $vm_video --query publicIps --output tsv)
 echo $vm_video_public_ip
 curl $vm_video_public_ip
 
@@ -79,24 +79,24 @@ less /var/log/cloud-init-output.log
 
 ## vm_images
 az vm create \
---resource-group $rg \
+--resource-group $RG \
 --name $vm_images \
 --image Ubuntu2404 \
 --size Standard_D2ds_v6 \
 --admin-username pietronromano \
 --generate-ssh-keys \
---vnet-name $vnet \
+--vnet-name $VNET \
 --subnet $sbn_backend \
 --custom-data $cloud_init
 
 # Open port 80 (default-allow-ssh 22 is created by default)
-az vm open-port --port 80 --resource-group $rg --name $vm_images --priority 200
-az vm auto-shutdown -g $rg -n $vm_images --time 1730 --email "pietronromano@live.com" 
+az vm open-port --port 80 --resource-group $RG --name $vm_images --priority 200
+az vm auto-shutdown -g $RG -n $vm_images --time 1730 --email "pietronromano@live.com" 
 # Use JMESPath query
-vm_images_private_ip=$(az vm list-ip-addresses -g $rg -n $vm_images  --query "[].virtualMachine.network.privateIpAddresses[0]" --output tsv)
+vm_images_private_ip=$(az vm list-ip-addresses -g $RG -n $vm_images  --query "[].virtualMachine.network.privateIpAddresses[0]" --output tsv)
 echo $vm_images_private_ip
 
-vm_images_public_ip=$(az vm show --show-details --resource-group $rg --name $vm_images --query publicIps --output tsv)
+vm_images_public_ip=$(az vm show --show-details --resource-group $RG --name $vm_images --query publicIps --output tsv)
 echo $vm_images_public_ip
 curl $vm_images_public_ip
 ssh -i ~/.ssh/id_rsa pietronromano@$vm_images_public_ip
@@ -109,7 +109,7 @@ grep "nginx" /var/log/cloud-init-output.log
 # Application Gateway with WAF
 az network application-gateway waf-policy create \
   --name $appgw_policy \
-  --resource-group $rg \
+  --resource-group $RG \
   --type OWASP \
   --version 3.2
 
@@ -117,8 +117,8 @@ az network application-gateway waf-policy create \
 az network application-gateway create \
   --name $appgw \
   --location $location \
-  --resource-group $rg \
-  --vnet-name $vnet \
+  --resource-group $RG \
+  --vnet-name $VNET \
   --subnet $sbn_appgw \
   --capacity 2 \
   --sku WAF_v2 \
@@ -134,21 +134,21 @@ az network application-gateway create \
 az network application-gateway address-pool update \
     --gateway-name $appgw \
     --name appGatewayBackendPool \
-    --resource-group $rg \
+    --resource-group $RG \
     --no-wait true \
     --servers $vm_images_private_ip $vm_video_private_ip
 
 # Storage account
 az storage account create \
   --name $storacc \
-  --resource-group $rg \
+  --resource-group $RG \
   --location $location \
   --sku Standard_LRS \
   --encryption-services blob
 
 
 pip_appgw_address=$(az network public-ip show \
-  --resource-group $rg \
+  --resource-group $RG \
   --name $pip_appgw \
   --query ipAddress \
   --output tsv)
@@ -163,9 +163,9 @@ curl $pip_appgw_address/video/test.html
 # DON'T DO: THIS IS DEPRECATED: (BadRequest) Diagnostic settings does not support retention for new diagnostic settings.
 # Configure diagnostics to record data into the ApplicationGatewayAccessLog, ApplicationGatewayPerformanceLog, and ApplicationGatewayFirewallLog logs. 
 # ?? Replace <subscriptionId> with your subscription identifier and then configure diagnostics with az monitor diagnostic-settings create.
-appgwid=$(az network application-gateway show --name $appgw --resource-group $rg --query id -o tsv)
+appgwid=$(az network application-gateway show --name $appgw --resource-group $RG --query id -o tsv)
 
-storeid=$(az storage account show --name $storacc --resource-group $rg --query id -o tsv)
+storeid=$(az storage account show --name $storacc --resource-group $RG --query id -o tsv)
 
 az monitor diagnostic-settings create --name appgwdiag --resource $appgwid \
   --logs '[ { "category": "ApplicationGatewayAccessLog", "enabled": true, "retentionPolicy": { "days": 30, "enabled": true } }, { "category": "ApplicationGatewayPerformanceLog", "enabled": true, "retentionPolicy": { "days": 30, "enabled": true } }, { "category": "ApplicationGatewayFirewallLog", "enabled": true, "retentionPolicy": { "days": 30, "enabled": true } } ]' \

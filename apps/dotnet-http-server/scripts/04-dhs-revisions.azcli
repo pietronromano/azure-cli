@@ -1,0 +1,117 @@
+#  Control Revisions and Traffic Splitting
+# DATE: 2026-03-19
+# RESULTS: Worked Fine!
+
+## Pre-requisites:
+## RUN 01-02-03 scripts in this folder to have the Container App deployed with the first tag, e.g. v1.0.0
+- An Azure Container Registry
+- An Azure Container Apps Environment with a custom VNet
+
+## References:
+- https://www.udemy.com/course/azure-container-apps/learn/lecture/38066828#overview
+- https://learn.microsoft.com/en-us/azure/container-apps/revisions-manage?tabs=bash
+- https://learn.microsoft.com/en-us/cli/azure/containerapp/revision?view=azure-cli-latest
+- https://learn.microsoft.com/en-us/cli/azure/containerapp/revision#az-containerapp-ingress-traffic-set
+
+##############################################################################################
+# Environment Variables
+## RUN: login.azcli for .env variables, login and subscription selection
+echo $ENV_VARS
+
+##############################################################################################
+
+## Create local variables
+## Create a second version of the Container with a different tag, e.g. v1.0.0 and v2.0.0, to demonstrate revisions and traffic splitting
+app="dotnethttpserver"
+cnt2="cnt-${app}v2"
+img2="img-${app}v2"
+host_port="8080"
+container_port="8080"
+tag2="v2.0.0"
+acr_repo="${ACR}.azurecr.io/${app}:${tag}"
+acr_repo2="${ACR}.azurecr.io/${app}:${tag2}"
+aca_app="${ORG}-aca-${PROJECT}-httpserver"
+
+# Construct the revision base name for later use in traffic splitting
+rev_base="${aca_app}--rev"
+
+## Change: apps/dotnet-http-server/app/Program.cs to show a different version
+app.MapGet("/version", () =>
+{
+  return "v2.0.0";
+});
+
+## [Start Docker if not already started]: build, force emulation when running on Mac
+# Move to the app directory
+cd apps/dotnet-http-server/app
+docker image build --platform linux/x86_64 -t $img2 -f Dockerfile .
+
+## Run
+docker container list 
+docker container run  --name $cnt2 \
+    --platform linux/x86_64 -it \
+    -p $host_port:$container_port $img2
+
+# New terminal window: test the new version is running locally
+curl http://localhost:8080/version
+
+docker tag $img2 $acr_repo2
+az acr login -n $ACR -g $RG
+docker push $acr_repo2
+
+## List the created repositories and tags in ACR
+az acr repository list -n $ACR  -o table
+az acr repository show-tags -n $ACR --repository $app -o table
+
+##############################################################################################
+
+# Update the Container App to use the new image with the new tag, this will create a new revision in the Container App
+# Pre-existing Container App: SEE: apps/dotnet-http-server/scripts/03-dhs-aca.azcli
+aca_app="${ORG}-aca-${PROJECT}-httpserver"
+
+# Show current revisions and traffic distribution, should be 100% on the first revision. 
+## --all shows all revisions, not just the active ones
+az containerapp revision list \
+    --name $aca_app \
+    --resource-group $RG \
+    --all \
+    -o table
+
+# Make a first copy, add our rev1 suffix (default latest), optional --from-revision
+az containerapp revision copy \
+    --name $aca_app \
+    --image $acr_repo \
+    --revision-suffix rev1 \
+    --resource-group $RG
+
+# Create another revision for rev2
+az containerapp revision copy \
+    --name $aca_app \
+    --image $acr_repo2 \
+    --revision-suffix rev2 \
+    --resource-group $RG
+
+
+# Set multiple mode
+az containerapp revision set-mode \
+    --name $aca_app \
+    --mode multiple \
+    --resource-group $RG
+
+# Split the ingress traffic between the two revisions, e.g. 20% to rev1 and 80% to rev2
+az containerapp ingress traffic set \
+    --name $aca_app \
+    --resource-group $RG \
+    --revision-weight ${rev_base}1=20 ${rev_base}2=80
+
+# Get the fqdn to test the Container App with curl
+aca_fqdn=$(az containerapp show -n $aca_app -g $RG \
+    --query 'properties.configuration.ingress.fqdn' \
+    --output tsv)
+echo "FQDN: $aca_fqdn"
+
+# Test the Container App with curl, should see a mix of v1.0.0 and v2.0.0 responses based on the traffic splitting
+for i in {1..10}; 
+  do curl "https://"$aca_fqdn"/version"; 
+  echo ""; 
+done;

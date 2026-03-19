@@ -11,7 +11,7 @@ nsg="nsg-front-tier"
 law="law-neu"
 sa="pnrsaneu"
 sacontainer="flowlogs"
-flowlog=$vnet"-flowlog-1"
+flowlog=$VNET"-flowlog-1"
 
 # Register Microsoft.Insights provider.
 ## Microsoft.Insights provider must be registered to successfully log traffic in a virtual network.
@@ -20,7 +20,7 @@ az provider register --namespace Microsoft.Insights
 # Create a Storage account
 az storage account create \
   --name $sa \
-  --resource-group $rg \
+  --resource-group $RG \
   --sku Standard_LRS \
   --kind StorageV2
 
@@ -32,14 +32,14 @@ az storage container create \
 
 # Enable virtual network flow logs and traffic analytics
 ## Create a traffic analytics workspace.
-az monitor log-analytics workspace create --name $law --resource-group $rg --location $location
+az monitor log-analytics workspace create --name $law --resource-group $RG --location $location
 
 ## Create a VNet flow log.
 az network watcher flow-log create \
     --location $location \
     --name $flowlog \
-    --resource-group $rg \
-    --vnet $vnet \
+    --resource-group $RG \
+    --vnet $VNET \
     --storage-account $sa \
     --traffic-analytics true \
     --workspace $law \
@@ -51,4 +51,4 @@ az network watcher flow-log list --location $location --out table
 
 
 # View details of a flow log resource
-az network watcher flow-log show --name $flowlog --resource-group $rg --location $location
+az network watcher flow-log show --name $flowlog --resource-group $RG --location $location

@@ -14,29 +14,29 @@ storage2="pnrsneu12"
 
 # Creat a service endpoint for Microsoft.Storage subnet:
 az network vnet subnet create \
-  --vnet-name $vnet \
-  --resource-group $rg \
+  --vnet-name $VNET \
+  --resource-group $RG \
   --name $subnet \
   --address-prefix 10.1.1.0/24 \
   --service-endpoints Microsoft.Storage
 
 # Create a network security group with az network nsg create
 az network nsg create \
-  --resource-group $rg \
+  --resource-group $RG \
   --location $location \
   --name $nsg
 
 # Associate the network security group to the subnet with az network vnet subnet update:
 az network vnet subnet update \
-  --vnet-name $vnet \
+  --vnet-name $VNET \
   --name $subnet \
-  --resource-group $rg \
+  --resource-group $RG \
   --network-security-group $nsg
 
 # Create security rules with az network nsg rule create. The rule that follows allows outbound access to the public IP addresses assigned to the Azure Storage service:
 
 az network nsg rule create \
-  --resource-group $rg \
+  --resource-group $RG \
   --nsg-name $nsg \
   --name Allow-Storage-All \
   --access Allow \
@@ -53,7 +53,7 @@ az network nsg rule create \
 # The previous rule overrides this rule, due to its higher priority, which allows access to the public IP addresses of Azure Storage.
 
 az network nsg rule create \
-  --resource-group  $rg \
+  --resource-group  $RG \
   --nsg-name $nsg \
   --name Deny-Internet-All \
   --access Deny \
@@ -71,7 +71,7 @@ storageAcctName1="pnrallowedaccount"
 
 az storage account create \
   --name $storageAcctName1 \
-  --resource-group $rg \
+  --resource-group $RG \
   --sku Standard_LRS \
   --kind StorageV2
 
@@ -80,7 +80,7 @@ storageAcctName2="pnrdeniedaccount"
 
 az storage account create \
   --name $storageAcctName2 \
-  --resource-group $rg \
+  --resource-group $RG \
   --sku Standard_LRS \
   --kind StorageV2
 
@@ -90,7 +90,7 @@ az storage account create \
 # Retrieve the connection string for the storage accounts into a variable with az storage account show-connection-string.
 saConnectionString1=$(az storage account show-connection-string \
   --name $storageAcctName1 \
-  --resource-group $rg \
+  --resource-group $RG \
   --query 'connectionString' \
   --out tsv)
 echo $saConnectionString1
@@ -106,7 +106,7 @@ az storage share create \
 # Retrieve the connection string for the storage accounts into a variable with az storage account show-connection-string. The connection string is used to create a file share in a later step.
 saConnectionString2=$(az storage account show-connection-string \
   --name $storageAcctName2 \
-  --resource-group $rg \
+  --resource-group $RG \
   --query 'connectionString' \
   --out tsv)
 echo $saConnectionString2
@@ -121,26 +121,26 @@ az storage share create \
 # Once network access is denied, the storage account isn't accessible from any network.
 az storage account update \
   --name $storageAcctName1 \
-  --resource-group $rg \
+  --resource-group $RG \
   --default-action Deny
 
 az storage account update \
   --name $storageAcctName2 \
-  --resource-group $rg \
+  --resource-group $RG \
   --default-action Deny
 
 
 # Allow network access to the storage account from the subnet with az storage account network-rule add.
 az storage account network-rule add \
-  --resource-group $rg \
+  --resource-group $RG \
   --account-name $storageAcctName1 \
-  --vnet-name $vnet \
+  --vnet-name $VNET \
   --subnet $subnet
 
 az storage account network-rule add \
-  --resource-group $rg \
+  --resource-group $RG \
   --account-name $storageAcctName2 \
-  --vnet-name $vnet \
+  --vnet-name $VNET \
   --subnet $subnet
 
 
@@ -150,14 +150,14 @@ echo $serviceResourceId
 
 # Create a service endpoint policy
 az network service-endpoint policy create \
-  --resource-group $rg \
+  --resource-group $RG \
   --name service-endpoint-policy \
   --location $location
 
 
 # Create and add a policy definition for allowing the previous Azure Storage account to the service endpoint policy
 az network service-endpoint policy-definition create \
-  --resource-group $rg \
+  --resource-group $RG \
   --policy-name service-endpoint-policy \
   --name policy-definition \
   --service "Microsoft.Storage" \
@@ -165,8 +165,8 @@ az network service-endpoint policy-definition create \
 
 # Use az network vnet subnet update to associate the service endpoint policy to the subnet.
 az network vnet subnet update \
-  --vnet-name $vnet \
-  --resource-group $rg \
+  --vnet-name $VNET \
+  --resource-group $RG \
   --name $subnet \
   --service-endpoints Microsoft.Storage \
   --service-endpoint-policy service-endpoint-policy
@@ -174,13 +174,13 @@ az network vnet subnet update \
 # To test network access to a storage account, deploy a VM in the subnet.
 # NOTE: Capacity Restrictions: Standard_DS1_v2
 az vm create \
-  --resource-group $rg \
+  --resource-group $RG \
   --name vmtestpe \
   --image Win2022Datacenter \
   --size Standard_D2ds_v6 \
   --admin-username pietronromano \
   --admin-password Axml-xsl0123 \
-  --vnet-name $vnet \
+  --vnet-name $VNET \
   --subnet $subnet
 
 
