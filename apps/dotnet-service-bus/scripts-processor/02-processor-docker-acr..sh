@@ -37,8 +37,8 @@ docker container logs -f $cnt
 # Azure Container Registry 
 
 # Variables
-## GOTO: the ROOT of the repo to pick up environment variables from .env file:
-cd ../../../
+
+
 ## RUN: login.azcli for .env variables, login and subscription selection
 echo $ENV_VARS
 ## Create the variables, note ACR can't have dashes in its name, so we need to remove them

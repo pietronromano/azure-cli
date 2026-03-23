@@ -18,7 +18,9 @@ tag="v1.0.0"
 
 
 ## [Start Docker if not already started]: build, force emulation when running on Mac
+docker image list
 docker image build --platform linux/x86_64 -t $img -f Dockerfile .
+
 
 ## Run
 docker container list 
@@ -41,14 +43,14 @@ curl http://localhost:$host_port/request-info
 
 #################################################################################
 # Azure Container Registry 
+# SEE acr/acr.azcli for ACR creation and environment variables
 
 # Variables
-## GOTO: the ROOT of the repo to pick up environment variables from .env file:
-cd ../../../
 ## RUN: login.azcli for .env variables, login and subscription selection
 echo $ENV_VARS
 ## Create the variables, note ACR can't have dashes in its name, so we need to remove them
 acr_repo="${ACR}.azurecr.io/${app}:${tag}"
+echo "ACR Repo: $acr_repo"
 
 ## Prexisting Container Registry: SEE: aca/aca-acr-env.azcli for details on creation
 

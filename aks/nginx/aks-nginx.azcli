@@ -37,8 +37,8 @@ az group create --name $RG --location $location
 
 # Create a Cluster: SKU: Base, Pricing tier: Free, One node, System-Assigned managed identity, 
 az aks create \
-    --resource-group $RG \
     --name $AKS_CLU \
+    --resource-group $RG \
     --node-count 1 \
     --generate-ssh-keys \
     --location $location
@@ -46,10 +46,8 @@ az aks create \
 ## Output: see aks-basic-output.json
 ##  "networkPlugin": "azure", "networkPluginMode": "overlay","networkPolicy": "none","outboundType": "loadBalancer",
 
-
 # Connect to the cluster
 az aks get-credentials --resource-group $RG --name $AKS_CLU --overwrite-existing
-
 
 # Check that the connection was successfull by listing the nodes and pods inside the cluster:
 kubectl get nodes

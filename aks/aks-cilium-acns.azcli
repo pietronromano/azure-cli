@@ -1,0 +1,26 @@
+# AKS with Cilium and Azure Container Networking (ACN) Network Policy
+
+# References:
+- https://learn.microsoft.com/en-us/azure/aks/network-policy-best-practices
+- https://learn.microsoft.com/en-us/azure/aks/azure-cni-powered-by-cilium
+
+
+
+# Use the following command to create a cluster with Azure CNI powered by cilium
+az aks create \
+  --name $AKS_CLU \
+  --resource-group $RG \
+  --location $LOCATION \
+  --network-plugin azure \
+  --network-plugin-mode overlay \
+  --pod-cidr 192.168.0.0/16 \
+  --network-dataplane cilium \
+  --generate-ssh-keys
+
+
+
+# Example: Enable Advanced Container Networking Services on an existing cluster
+az aks update \
+  --resource-group $RG \
+  --name $AKS_CLU \
+  --enable-acns

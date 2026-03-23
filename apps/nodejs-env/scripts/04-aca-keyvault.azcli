@@ -3,8 +3,8 @@
 # RESULT: Worked Fine!
 
 # Environment ariables
-## GOTO: the ROOT of the repo to pick up environment variables from .env file:
-cd ../../../
+
+
 ## RUN: login.azcli for .env variables, login and subscription selection
 echo $ENV_VARS
 # Override: westeurope didn't allow container apps env, because it's "FREE AKS"

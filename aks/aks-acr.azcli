@@ -1,0 +1,4 @@
+# Integrate AKS with ACR (Azure Container Registry)
+
+References:
+- https://learn.microsoft.com/en-us/azure/aks/cluster-container-registry-integration?tabs=azure-cli

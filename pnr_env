@@ -1,0 +1,15 @@
+TENANT=pietronromanolive.onmicrosoft.com
+LOCATION=northeurope
+
+
+ORG=pnr
+PROJECT=test
+
+RG="${ORG}-rg-${PROJECT}"
+ACR="${ORG}acr${PROJECT//-/}"
+SA="${ORG}sa${PROJECT//-/}"
+MI="${ORG}-mi-${PROJECT}"
+ACA_ENV="${ORG}-acaenv-${PROJECT}"
+AKS_CLU="${ORG}-aks-${PROJECT}"
+VNET="${ORG}-vnet-${PROJECT}"
+LAW="${ORG}-law-${PROJECT}"

@@ -29,6 +29,8 @@ curl http://localhost:5087/request-info
 ### Send a GET request to the /system-info endpoint to see detailed information about the system and environment for debugging purposes.
 curl http://localhost:5087/system-info
 
+### Send a GET request to the /log endpoint to log a message
+curl "http://localhost:5087/log?message=HelloFromCurl"
 
 ### Send JSON via a POST request to the /echo endpoint
 curl -X POST -H "Content-Type: application/json" -d '{"name":"Pluxee","role":"DevOps"}' http://localhost:5087/echo

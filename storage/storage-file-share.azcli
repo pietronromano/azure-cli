@@ -1,0 +1,37 @@
+# Generic script to create An Azure Storage Account
+
+# Pre-requisites: RUN: identity/managed-identity.azcli
+- Resource Group
+
+##############################################################################################
+# Environment Variables
+## RUN: login.azcli for .env variables, login and subscription selection
+echo $ENV_VARS
+
+share_name="myfileshare"
+
+##############################################################################################
+
+# Create a Storage Account with Azure CLI, note the --enable-large-file-share flag which is required for Azure Files shares larger than 5TB, and also enables the creation of file shares in the storage account.
+az storage account create \
+  --resource-group $RG \
+  --name $SA \
+  --location "$LOCATION" \
+  --kind StorageV2 \
+  --sku Standard_LRS \
+  --enable-large-file-share \
+  --query provisioningState
+
+az storage share-rm create \
+  --resource-group $RG \
+  --storage-account $SA \
+  --name $share_name \
+  --quota 1024 \
+  --enabled-protocols SMB \
+  --output table
+
+sa_key=$(az storage account keys list \
+        --account-name $SA \
+        --resource-group $RG \
+        --query "[0].value" -o tsv)
+echo "Storage Account Key: $sa_key"

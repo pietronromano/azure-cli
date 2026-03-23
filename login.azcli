@@ -1,7 +1,8 @@
 # Login to Azure and set subscription
 
 ## References:
-- https://learn.microsoft.com/en-gb/cli/azure/authenticate-azure-cli-interactively?view=azure-cli-latest
+- Interactive: https://learn.microsoft.com/en-gb/cli/azure/authenticate-azure-cli-interactively?view=azure-cli-latest
+- Service Principal: https://learn.microsoft.com/en-gb/cli/azure/azure-cli-sp-tutorial-1?view=azure-cli-latest&tabs=bash
 
 # Get environment variables from .env file: we use absolute path to avoid issues with relative paths when running the script from different locations.
 ## NOTE! POSSIBLE ERROR: An environment file is configured but terminal environment injection is disabled. 
@@ -10,6 +11,7 @@
 clear
 echo "CURRENT DIRECTORY: $(pwd)"
 source /Users/macbookpro/dev/azure/github/azure-cli/.env
+
 ENV_VARS="TENANT:$TENANT, SUBSCRIPTION:$SUBSCRIPTION, ORG:$ORG, LOCATION:$LOCATION, PROJECT:$PROJECT, RG:$RG " 
 ENV_VARS="$ENV_VARS, ACR:$ACR SA:$SA MI:$MI ACA_ENV:$ACA_ENV AKS_CLU:$AKS_CLU VNET:$VNET LAW:$LAW"
 echo "ENV_VARS: $ENV_VARS"

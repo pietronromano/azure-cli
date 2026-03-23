@@ -1,11 +1,11 @@
 ##########################################################################################
-
+# Create an AKS cluster and deploy the app from ACR into AKS
 
 ## SEE previous script for building App with Docker and creating a container registry in Azure (ACR): 
 
 
 # GOTO: the ROOT of the repo to pick up environment variables from .env file:
-cd ../../../
+
 # RUN: login.azcli to set environment variables, login and subscription selection steps
 # Env Vars: TENANT, SUBSCRIPTION, ORG, LOCATION,PROJECT,RG
 
