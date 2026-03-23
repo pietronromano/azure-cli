@@ -1,0 +1,59 @@
+##############################################################################################
+# Generic script to create An Azure Container Apps Environment with a custom VNet 
+
+# Pre-requisites: 
+- Resource Group: SEE: identity/managed-identity.azcli
+- Log Analytics Workspace: SEE: monitor/log-analytics-ws.azcli
+
+# References:
+- https://learn.microsoft.com/en-us/cli/azure/containerapp/env?view=azure-cli-latest
+
+##############################################################################################
+
+# Environment Variables
+## RUN: login.azcli for .env variables, login and subscription selection
+echo $ENV_VARS
+
+## Create local variables, note ACR can't have dashes in its name, so we need to remove them
+subnet_aca="${ORG}-snet-${PROJECT}"
+  
+## Create the VNet and Subnet delegated to ACA
+az network vnet create \
+    --resource-group $RG \
+    --name $VNET \
+    --location $LOCATION \
+    --address-prefix 10.0.0.0/16
+         
+az network vnet subnet create \
+    --resource-group $RG \
+    --vnet-name $VNET \
+    --name $subnet_aca \
+    --address-prefixes 10.0.1.0/24 \
+    --delegations Microsoft.App/environments
+
+### Get the subnet resource ID for use in creating the Container Apps Environment     
+subnet_aca_id=$(az network vnet subnet show \
+    --resource-group $RG \
+    --vnet-name $VNET \
+    --name $subnet_aca \
+    --query "id" -o tsv | tr -d '[:space:]')
+echo "Subnet ACA ID: $subnet_aca_id"
+
+##############################################################################################
+
+## Create ContainerApps Env: 
+### internal-only false: allows access from anywhere (instead of just vnet) NOTE: FOR EDUCATION AND TESTING ONLY
+### internal-only true: just vnet access, (although we can still use the debug console to curl into it)
+internal_only=false
+# Pre-requisit: obtain the law_id and law_key from monitor/log-analytics-ws.azcli
+az containerapp env create \
+    --name $ACA_ENV \
+    --resource-group $RG \
+    --location $LOCATION \
+    --infrastructure-subnet-resource-id $subnet_aca_id \
+    --internal-only $internal_only \
+    --logs-workspace-id $law_id \
+    --logs-workspace-key $law_key
+
+
+##############################################################################################

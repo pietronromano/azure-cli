@@ -1,0 +1,205 @@
+#####
+# Generic Load Docker Image upto ACR and Deploy to Azure Container Apps with Azure CLI
+## Pre-requisites:
+## RUN 01-02-03 scripts in this folder to have the Container App deployed with the first tag, e.g. v1.0.0
+- An Azure Container Registry: SEE: acr/01-acr-create.azcli
+- An Azure Container Apps Environment with a custom VNet
+
+##############################################################################################
+
+# Environment Variables
+## RUN: login.azcli for .env variables, login and subscription selection
+echo $ENV_VARS
+## Create local variables, note ACR can't have dashes in its name, so we need to remove them
+app="testapp"
+tag="v1.0.0"
+acr_repo="${ACR}.azurecr.io/${app}:${tag}"
+host_port="8080"
+container_port="8080"
+target_port=$container_port
+
+
+# PREXISTING Container Apps Environment, SEE: aca/aca-acr-env.azcli
+# NOTE! must be less than 32 characters
+aca_app="${ORG}-aca-${PROJECT}-httpserver"
+
+echo "Container App Name: $aca_app LENGTH: ${#aca_app}"
+##############################################################################################
+
+## Create the Container App
+### SEE: https://learn.microsoft.com/en-us/azure/container-apps/containerapp-up
+### SEE: https://learn.microsoft.com/en-us/cli/azure/containerapp?view=azure-cli-latest#az-containerapp-up(containerapp)
+### user-assigned: specify the managed identity that we created earlier for ACR access
+### ingress "external": allows access from public internet (or VNET if environment is internal only)
+### ingress "internal": only accessible from within the Container App Environment's VNET
+###                    - FQDN resolves only from VMs/services in the VNET
+###                    - NOT accessible from public internet or debug console via FQDN
+
+mi_id=$(az identity show -g $RG -n $MI --query "id" -o tsv)
+echo "Managed Identity ID: "$mi_id
+
+az containerapp create \
+  --name $aca_app \
+  --resource-group $RG \
+  --environment $ACA_ENV \
+  --target-port $target_port \
+  --ingress external \
+  --image $ACR.azurecr.io/$app:$tag \
+  --registry-identity $mi_id \
+  --registry-server $ACR.azurecr.io \
+  --user-assigned $mi_id
+
+### See full details
+az containerapp show -n $aca_app -g $RG
+
+### Get the fqdn 
+aca_fqdn=$(az containerapp show -n $aca_app -g $RG \
+    --query 'properties.configuration.ingress.fqdn' \
+    --output tsv)
+echo "FQDN: $aca_fqdn"
+
+### Test the Container App with curl
+### NOTE: the container app can be accessed via http OR https://<>, (HTTP gets redirected to HTTPS)
+### NOTE: Use the URL WITHOUT the target port (which is for the internal container port)
+### NOTE: Only works if ingress is set to "external"
+###       If "internal", FQDN only works from VMs/services in the VNET (NOT from debug console - use localhost there)
+curl "https://"$aca_fqdn"/version"
+
+##############################################################################################
+
+### Debug the Container App
+### Stream Logs
+az containerapp logs show -n $aca_app -g $RG --follow
+
+### Container Apps Console / Debug: allows connecting to live console
+### - NOTE: Can do this also from the "Console" item in the Portal, both for Console and Debug
+### - CONSOLE: https://learn.microsoft.com/en-us/azure/container-apps/container-console?tabs=bash
+###   - Debian image (from dotnet)
+### - DEBUG: https://learn.microsoft.com/en-us/azure/container-apps/container-debug-console?tabs=bash
+###   - separate container, utils installed, "Common Base Linux Mariner"
+
+az containerapp revision list \
+  --name $aca_app \
+  --resource-group $RG \
+  --query "[].name"
+
+az containerapp replica list \
+  --name $aca_app \
+  --resource-group $RG \
+  --query "[].{Containers:properties.containers[].name, Name:name}"
+
+## DEBUG in a separate container, with the most recent revision
+### NOTE: SEE also Portal -> Monitoring -> Console for a similar experience without needing to run this command
+az containerapp debug \
+  --name $aca_app \
+  --resource-group $RG
+
+### curl: (only installed on debug container)
+### NOTE: get the container IP from the results returned from previous call to <fqdn>/request
+### NOTE: IP is not the as the FQDN, it's an internal container IP
+curl 100.100.205.217:8080/request 
+
+#### [In a separate terminal]: Connect to the actual container, most recent revision
+az containerapp exec \
+  --name $aca_app \
+  --resource-group $RG
+
+### Once inside the container: see app contents in this dir:
+cd /proc/1/cwd/ 
+
+### Check dotnet info/  runtime versions (only installed on Container Console, NOT the Debug container)
+dotnet --info
+dotnet --list-runtimes
+
+### See proceses:
+ps aux
+
+## Exit the container console when finished
+exit
+
+##############################################################################################
+
+# Get Internal IP for Container Apps with Internal Ingress
+## NOTE: For internal-only container apps (ingress="internal"):
+##   - FQDN is only accessible from VMs/services within the same VNET
+##   - FQDN does NOT resolve from debug/exec console (use localhost or container IP instead)
+##   - Use FQDN from: VMs in VNET, VPN/Bastion connections, or other container apps in same environment
+
+## Get the internal FQDN (works for both internal and external ingress)
+aca_internal_fqdn=$(az containerapp show -n $aca_app -g $RG \
+    --query 'properties.configuration.ingress.fqdn' \
+    --output tsv)
+echo "Internal FQDN: $aca_internal_fqdn"
+
+### Get the static IP of the Container App Environment (if configured)
+### This is the ingress IP that routes to all apps in the environment
+aca_env_static_ip=$(az containerapp env show -n $ACA_ENV -g $RG \
+    --query 'properties.staticIp' \
+    --output tsv)
+echo "Container App Environment Static IP: $aca_env_static_ip"
+
+### Get replica information
+### NOTE: Container replica IPs are not directly exposed in the CLI output
+### The replicas are accessed via the FQDN which load balances across all replicas
+az containerapp replica list \
+  --name $aca_app \
+  --resource-group $RG \
+  --query "[].{Name:name, Containers:properties.containers[].name}" \
+  --output table
+
+
+### For internal apps, access via: 
+### 1. From VMs/services in the same VNET: curl https://$aca_internal_fqdn/version
+### 2. From debug console: MUST use localhost or container IP (FQDN does NOT resolve)
+### 3. Via VPN/Bastion connected to the VNET: curl https://$aca_internal_fqdn/version
+
+
+### Troubleshooting internal apps: Resolve internal FQDN to IP
+### IMPORTANT: FQDN resolution only works from VMs/services in the same VNET, NOT from debug console
+### From a VM in the VNET (with network tools installed):
+nslookup $aca_internal_fqdn
+### Or use dig if available:
+dig $aca_internal_fqdn
+
+## NOTE: From debug console: Cannot resolve FQDN, must use localhost or container IP (see above)
+
+#### DEBUG in a separate container, with the most recent revision
+az containerapp debug \
+  --name $aca_app \
+  --resource-group $RG
+
+## Curl from debug container: (curl only installed on debug container, not exec container)
+### NOTE: For INTERNAL apps: FQDN DOES NOT RESOLVE FROM THE debug container
+
+### Does work: Use localhost on the target port (debug container shares network with app)
+curl http://localhost:8080/version
+
+### To discover the actual container IP from within debug console:
+### Get the IP address of the container
+mi_ip=$(hostname -i)
+echo "Container IP: $mi_ip"
+
+### WORKS! Then use it to curl directly (replace with actual IP from above)
+### NOTE: Container IPs are ephemeral and change on restart/scale
+curl http://$mi_ip:8080/version 
+
+# Or check network interfaces:
+ip addr show
+# Or specifically for eth0:
+ip addr show eth0 | grep "inet " | awk '{print $2}' | cut -d/ -f1
+
+
+## Alternative: [In a separate terminal]: Connect to the actual container, most recent revision
+az containerapp exec \
+  --name $aca_app \
+  --resource-group $RG
+
+## Once inside the container: see app contents in this dir:
+cd /proc/1/cwd/ 
+
+### Get the container's actual IP address from inside:
+hostname -i
+# Or more detailed:
+cat /etc/hosts | grep $(hostname)
+# Network interfaces (may require net-tools package):
+# ip addr show

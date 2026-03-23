@@ -1,0 +1,192 @@
+# DNS: Custom domain names and SSL/TLS certificates for Container Apps
+#######################################################
+# DATE: 2026-03-20
+# RESULTS: Worked Fine! pnrtest.com was configured as a custom domain for the Container App, and a managed certificate wasissued and bound to the domain. The domain is accessible via HTTPS with a valid certificate.
+
+# Pre-requisites: 
+- Resource Group: SEE: identity/managed-identity.azcli
+- Log Analytics Workspace: SEE: monitor/log-analytics-ws.azcli
+- ACA Env: SEE: aca/aca-env.azcli
+- Container App: SEE: apps/dotnet-http-server/scripts/03-dhs-aca.azcli
+
+# References
+- https://www.udemy.com/course/azure-container-apps/learn/lecture/39135918#overview
+- https://learn.microsoft.com/en-us/azure/application-gateway/create-ssl-portal
+- https://learn.microsoft.com/en-us/azure/container-apps/custom-domains-certificates?tabs=general&pivots=azure-portal
+
+- https://learn.microsoft.com/en-us/azure/app-service/manage-custom-dns-buy-domain
+
+
+###########################################################################################
+
+
+# COPILOT: Here are several Azure CLI methods to query Container Apps with custom domains across all subscriptions:
+## Method 1: Resource Graph Query (Recommended - Fastest)
+### RESULT: Fast, returns all Container Apps with custom domains in all subscriptions, including details about the custom domains and certificates
+az graph query -q "Resources 
+| where type == 'microsoft.app/containerapps' 
+| where properties.configuration.ingress.customDomains != '[]' 
+| mvexpand customDomain = properties.configuration.ingress.customDomains
+| project subscriptionId, resourceGroup, name, customDomainName = customDomain.name, bindingType = customDomain.bindingType, certificateId = customDomain.certificateId
+| where isnotnull(customDomainName)
+| order by subscriptionId, resourceGroup, name" \
+--output json > containerapps_custom_domains.json
+
+## Method 2: Bash Loop (All Subscriptions)
+### RESULT: Not good, very slow, loops through every Container App in every subscription, even if  Microsoft.App is not registered in the subscription
+for sub in $(az account list --query "[].id" -o tsv); do
+  echo "Checking subscription: $sub"
+  az account set --subscription $sub
+  az containerapp list \
+    --query "[?properties.configuration.ingress.customDomains].{Subscription:'$sub', Name:name, ResourceGroup:resourceGroup, CustomDomains:properties.configuration.ingress.customDomains[].name}" \
+    --output table
+done
+
+
+###########################################################################################
+
+# SOURCE: aca/aca-course/code/14_aca_custom_domain/commands.ps1
+DOMAIN_NAME="pnrtest.com" 
+SUBDOMAIN_NAME=$app
+
+# Example (NOT USED, did it manually): Create an App Service Domain through GoDaddy
+az appservice domain create \
+--resource-group $RG \
+--hostname $DOMAIN_NAME \
+--contact-info=@'contact_info.json' \
+--accept-terms
+
+## This generates an app service domain and a Azure DNS Zone. 
+## The Azure DNS Zone is used to create DNS records for the domain.
+
+# Get the FQDN of the Container App  
+aca_fqdn=$(az containerapp show \
+  --name $aca_app \
+  --resource-group $RG \
+  --query properties.configuration.ingress.fqdn \
+  --output tsv)
+echo $aca_fqdn
+
+# Get the aca_env_ip address of the Container Apps Environment
+aca_env_ip=$(az containerapp env show \
+  --name $ACA_ENV \
+  --resource-group $RG \
+  --query properties.staticIp \
+  --output tsv)
+echo $aca_env_ip
+
+# Get the domain verification code: SEE also: Portal -> Container App -> Networking -> Custom Domains 
+DOMAIN_VERIFICATION_CODE=$(az containerapp show -n \
+   $aca_app -g \
+   $RG -o tsv \
+   --query "properties.customDomainVerificationId")
+
+echo $DOMAIN_VERIFICATION_CODE
+
+# Configure Custom Domain Names for Container App
+## You have two options, either with CAME for a subdomain or with A record for APEX / root domain
+# Option 1. Create DNS records in Azure DNS Zone [CNAME record]
+## SEE Also: Portal -> DNS Zone (pnrtest.com) -> Recordsets
+az network dns record-set cname create \
+   --name $SUBDOMAIN_NAME \
+   --resource-group rg-dns \
+   --zone-name $DOMAIN_NAME
+
+az network dns record-set cname set-record \
+   --record-set-name $SUBDOMAIN_NAME \
+   --resource-group rg-dns \
+   --zone-name $DOMAIN_NAME \
+   --cname $aca_fqdn
+
+# Create a TXT record for domain verification
+az network dns record-set txt create \
+   --resource-group rg-dns \
+   --zone-name $DOMAIN_NAME \
+   --name "asuid.$SUBDOMAIN_NAME" 
+
+az network dns record-set txt add-record \
+   --resource-group rg-dns \
+   --zone-name $DOMAIN_NAME \
+   --record-set-name "asuid.$SUBDOMAIN_NAME" \
+   --value $DOMAIN_VERIFICATION_CODE
+
+sleep 60
+
+## Add the domain to your container app
+az containerapp hostname add \
+   --hostname "$SUBDOMAIN_NAME.$DOMAIN_NAME" \
+   --resource-group $RG \
+   --name $aca_app
+
+## Configure the managed certificate and bind the domain to your container app
+###: NOTE: It may take up to 20 minutes to create and issue a managed certificate.
+az containerapp hostname bind \
+   --hostname "$SUBDOMAIN_NAME.$DOMAIN_NAME" \
+   --resource-group $RG \
+   --name $aca_app \
+   --environment $ACA_ENV \
+   --validation-method CNAME
+
+### Result
+Binding managed certificate 'mc-pnr-acaenv-tes-dotnethttpserver-5031' to dotnethttpserver.pnrtest.com
+[
+  {
+    "bindingType": "SniEnabled",
+    "certificateId": "/subscriptions/.../resourceGroups/pnr-rg-test/providers/Microsoft.App/managedEnvironments/pnr-acaenv-test/managedCertificates/mc-pnr-acaenv-tes-dotnethttpserver-5031",
+    "name": "dotnethttpserver.pnrtest.com"
+  }
+]
+
+
+## Verify the domain by curling to the domain name 
+custom_app_domain="https://$SUBDOMAIN_NAME.$DOMAIN_NAME"
+echo "Custom App Domain: $custom_app_domain"
+curl $custom_app_domain/version
+
+
+###########################################################################################
+# Option 2. Create DNS records in Azure DNS Zone [A record]
+
+# Create an A record for the root domain
+
+az network dns record-set a create \
+   --name "@" \
+   --resource-group rg-dns \
+   --zone-name $DOMAIN_NAME
+
+az network dns record-set a add-record \
+   --record-set-name "@" \
+   --resource-group rg-dns \
+   --zone-name $DOMAIN_NAME \
+   --ipv4-address $aca_env_ip
+
+# Create a TXT record for domain verification
+
+az network dns record-set txt create \
+   --resource-group rg-dns \
+   --zone-name $DOMAIN_NAME \
+   --name "asuid" 
+
+az network dns record-set txt add-record \
+   --resource-group rg-dns \
+   --zone-name $DOMAIN_NAME \
+   --record-set-name "asuid" \
+   --value $DOMAIN_VERIFICATION_CODE
+
+sleep 60
+
+# 6. Add the domain to your container app
+
+az containerapp hostname add --hostname "$DOMAIN_NAME" -g $RG -n $aca_app
+
+# Configure the managed certificate and bind the domain to your container app
+
+az containerapp hostname bind --hostname $DOMAIN_NAME -g $RG -n $aca_app --environment $ACA_ENV --validation-method HTTP
+
+# 7. Verify the domain name
+
+# Verify the domain by navigating to the domain name in a browser. You should see the default page for the container app.
+
+echo "https://$DOMAIN_NAME" # if using A record with APEX / root domain
+
+###########################################################################################

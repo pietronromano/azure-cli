@@ -1,0 +1,103 @@
+# Mount Storage Volumes in Azure Container Apps
+# DATE: 2026-03-22
+# RESULTS: Worked Fine! Files written to /app/logs in the container are persisted in the Azure file share and can be accessed even if the container is restarted or redeployed.
+
+## Pre-requisites:
+## RUN 01-02-03 scripts in this folder to have the Container App deployed with the first tag, e.g. v1.0.0
+- A Container Registry
+- A Container Apps Environment
+- A Container App
+- A Storage Account with a file share: SEE storage/storage-file-share.azcli 
+
+## References:
+- https://learn.microsoft.com/en-us/azure/container-apps/storage-mounts-azure-files?tabs=bash
+
+##############################################################################################
+# Environment Variables
+## RUN: login.azcli for .env variables, login and subscription selection
+echo $ENV_VARS
+aca_app="${ORG}-aca-${PROJECT}-httpserver"
+share_name="myfileshare"
+mount_name="mystoragemount"
+
+##############################################################################################
+
+## Local variables same as previous scripts, just adding storage specific variables
+
+
+##############################################################################################
+
+
+## Get the storage account key required to create the storage link in your Container Apps environment
+## NOTE: Container Apps does not support identity-based access to Azure file shares.
+sa_key=$(az storage account keys list \
+        --account-name $SA \
+        --resource-group $RG \
+        --query "[0].value" -o tsv)
+echo "Storage Account Key: $sa_key"
+
+## Create the storage link in your Container Apps environment using the Azure CLI
+az containerapp env storage set \
+  --access-mode ReadWrite \
+  --azure-file-account-name $SA \
+  --azure-file-account-key $sa_key \
+  --azure-file-share-name $share_name \
+  --storage-name $mount_name \
+  --name $ACA_ENV \
+  --resource-group $RG \
+  --output table
+
+
+## This command creates a link between container app environment and the file share created with the az storage share-rm command.
+## Now that the storage account and environment are linked, the container app can use the storage mount.
+
+## Export the container app's configuration.
+az containerapp show \
+  --name $aca_app \
+  --resource-group $RG \
+  --output yaml > "${aca_app}.yaml"
+
+## Open "${aca_app}.yaml" in a code editor.
+##Replace the volumes: null definition in the template section with a volumes: definition referencing the storage volume:
+# yaml
+  template:
+    containers:
+      - image: plxacrccoepnrtest.azurecr.io/dotnethttpserver:v1.0.0
+        imageType: ContainerImage
+        name: plx-aca-ccoe-pnrtest-httpserver
+        resources:
+          cpu: 0.5
+          ephemeralStorage: 2Gi
+          memory: 1Gi
+        volumeMounts:
+        - volumeName: myfileshare
+          mountPath: /app/logs
+    volumes:
+    - name: myfileshare
+      storageName: mystoragemount
+      storageType: AzureFile
+  workloadProfileName: Consumption
+
+## Update the container app with the modified configuration file. 
+## This will trigger a new deployment of the container app with the updated configuration that includes the storage mount.
+az containerapp update \
+  --name $aca_app \
+  --resource-group $RG \
+  --yaml "${aca_app}.yaml" 
+
+
+##############################################################################################
+# Test
+
+# Get the fqdn to test the Container App with curl
+aca_fqdn=$(az containerapp show -n $aca_app -g $RG \
+    --query 'properties.configuration.ingress.fqdn' \
+    --output tsv)
+echo "FQDN: $aca_fqdn"
+
+# Test the Container App with curl, should see a mix of v1.0.0 and v2.0.0 responses based on the traffic splitting
+## zsh loop
+for i in {1..10}; 
+  do curl "https://"$aca_fqdn"/log?message=HelloFromCurl-$i"; 
+  echo ""; 
+done
