@@ -47,10 +47,11 @@ app.MapGet("/env-vars", () =>
   return Results.Ok(variables);
 });
 
-// GET endpoint: returns a version number: use to verify deployment has succeeded after updates
+// GET endpoint: returns a hard codedversion number, independent of environment variables
+// Used to verify that the deployment of new version has succeeded after updates
 app.MapGet("/version", () =>
 {
-  return Results.Ok("v2.0.0");
+  return Results.Ok("v1.0.0");
 });
 
 // GET endpoint: returns request info as JSON

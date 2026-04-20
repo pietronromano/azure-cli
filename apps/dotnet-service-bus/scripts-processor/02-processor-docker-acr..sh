@@ -2,25 +2,28 @@
 # Docker Build
 
 # Move to the app directory
-cd apps/dotnet-service-bus/ServiceBus.Processor
+cd apps/dotnet-service-bus/SB.ExampleProcessor
  
 # repository name must be lowercase
-app="sbprocessor"
+app="sbproc"
 cnt="cnt-${app}"
 img="img-${app}"
-tag="v1.0.0"
+tag="v3.0.0-sessions"
 
 ## [Start Docker if not already started]: build, force emulation when running on Mac
 
 ## NOTE! Notice the two ".." at the end instead of just one "." 
 ## This tells Docker to use the parent directory (dotnet-service-bus) as the build context, 
-##which gives access to both ServiceBus.Sender and ServiceBus.Utils directories.
-docker image build --platform linux/x86_64 -t $img -f Dockerfile ..
+## ...which gives access to both SB.ExampleSender and SB.Utils directories.
 
-## Run
+## IMPORTANT: --platform linux/amd64 ensures proper OS metadata for ACR/ACA
+## AVOID ACR error: use --provenance=false to avoid ACR error "Selected tag uses an invalid operating system"": 
+docker image build --provenance=false --platform linux/amd64 -t $img -f Dockerfile ..
+
+## Run with .env variables, and platform for proper metadata (fixes "invalid operating system" error in ACR)
 docker container list 
 docker container run --name $cnt \
-    --platform linux/x86_64 -it \
+    --platform linux/amd64 -it \
     --env-file .env \
     $img
 
@@ -41,10 +44,9 @@ docker container logs -f $cnt
 
 ## RUN: login.azcli for .env variables, login and subscription selection
 echo $ENV_VARS
-## Create the variables, note ACR can't have dashes in its name, so we need to remove them
-tag="v1.0.0"
+## Create the variables, note ACR can't have dashes in its name, so we need to have removed them previously
 acr_repo="${ACR}.azurecr.io/${app}:${tag}"
-
+echo "ACR Repo: $acr_repo"
 
 ## Prexisting Container Registry: SEE: aca/aca-acr-env.azcli for details on creation
 

@@ -14,9 +14,10 @@
 ## RUN: login.azcli for .env variables, login and subscription selection
 echo $ENV_VARS
 
-## Create local variables, note ACR can't have dashes in its name, so we need to remove them
+## Create local variables
 subnet_aca="${ORG}-snet-${PROJECT}"
-  
+echo "Subnet ACA Name: $subnet_aca"
+
 ## Create the VNet and Subnet delegated to ACA
 az network vnet create \
     --resource-group $RG \
@@ -44,8 +45,8 @@ echo "Subnet ACA ID: $subnet_aca_id"
 ## Create ContainerApps Env: 
 ### internal-only false: allows access from anywhere (instead of just vnet) NOTE: FOR EDUCATION AND TESTING ONLY
 ### internal-only true: just vnet access, (although we can still use the debug console to curl into it)
-internal_only=false
-# Pre-requisit: obtain the law_id and law_key from monitor/log-analytics-ws.azcli
+internal_only=true
+# Pre-requisite: obtain the law_id and law_key from monitor/log-analytics-ws.azcli
 az containerapp env create \
     --name $ACA_ENV \
     --resource-group $RG \
@@ -57,3 +58,20 @@ az containerapp env create \
 
 
 ##############################################################################################
+
+# Create an extra Workload Profile
+## References:
+- https://docs.azure.cn/en-us/container-apps/workload-profiles-overview
+- https://learn.microsoft.com/en-us/cli/azure/containerapp/env/workload-profile?view=azure-cli-latest
+
+# D4-D32, E4-E32, Consumption, Flex
+az containerapp env workload-profile list-supported -l $LOCATION -o table
+
+aca_workload_profile="wp-d4-dedicated"
+az containerapp env workload-profile add \
+    --resource-group $RG \
+    --name $ACA_ENV \
+    --workload-profile-name $aca_workload_profile \
+    --workload-profile-type D4 \
+    --max-nodes 3 \
+    --min-nodes 1

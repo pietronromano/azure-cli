@@ -3,17 +3,17 @@
 FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build-env
 WORKDIR /app
 
-# Copy ServiceBus.Utils project files and restore as distinct layers
-COPY ServiceBus.Utils/*.csproj ./ServiceBus.Utils/
-COPY ServiceBus.Processor/*.csproj ./ServiceBus.Processor/
-WORKDIR /app/ServiceBus.Processor
+# Copy SB.Utils project files and restore as distinct layers
+COPY SB.Utils/*.csproj ./SB.Utils/
+COPY SB.ExampleSender/*.csproj ./SB.ExampleSender/
+WORKDIR /app/SB.ExampleSender
 RUN dotnet restore 
 
 # Copy everything else and build
 WORKDIR /app
-COPY ServiceBus.Utils/. ./ServiceBus.Utils/
-COPY ServiceBus.Processor/. ./ServiceBus.Processor/
-WORKDIR /app/ServiceBus.Processor
+COPY SB.Utils/. ./SB.Utils/
+COPY SB.ExampleSender/. ./SB.ExampleSender/
+WORKDIR /app/SB.ExampleSender
 RUN dotnet publish -c Release -o /app/out
 
 # Build runtime image
@@ -25,4 +25,4 @@ COPY --from=build-env /app/out .
 EXPOSE 8080
 ENV ASPNETCORE_URLS=http://+:8080
 
-ENTRYPOINT ["dotnet", "ServiceBus.Processor.dll"]
+ENTRYPOINT ["dotnet", "SB.ExampleSender.dll"]

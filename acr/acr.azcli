@@ -17,6 +17,7 @@ az acr create -n $ACR -g $RG --admin-enabled false --sku Standard
 
 az acr show -n $ACR -g $RG
 
+# NOTE this often returns "An error occurred: HELM_VERSION_ERROR", even if the registry was created successfully. 
 az acr check-health --name $ACR
 
 # IF NEEDED: Assign AcrPush role to your user

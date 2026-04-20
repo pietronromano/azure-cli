@@ -1,6 +1,8 @@
 obj/
 bin/
 
+.scratch.sh
+
 .vscode/
 
 *.PublishSettings

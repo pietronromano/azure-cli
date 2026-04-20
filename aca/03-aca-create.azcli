@@ -11,7 +11,7 @@
 ## RUN: login.azcli for .env variables, login and subscription selection
 echo $ENV_VARS
 ## Create local variables, note ACR can't have dashes in its name, so we need to remove them
-app="testapp"
+# app="testapp" --- IGNORE IF VARIABLE HAS BEEN SET IN PREVIOUS SCRIPT 01-aca-docker-acr.sh ---
 tag="v1.0.0"
 acr_repo="${ACR}.azurecr.io/${app}:${tag}"
 host_port="8080"
@@ -21,16 +21,15 @@ target_port=$container_port
 
 # PREXISTING Container Apps Environment, SEE: aca/aca-acr-env.azcli
 # NOTE! must be less than 32 characters
-aca_app="${ORG}-aca-${PROJECT}-httpserver"
-
-echo "Container App Name: $aca_app LENGTH: ${#aca_app}"
+aca_app="${ORG}-aca-${PROJECT}-${app//-/}"
+echo "Container App Name: $aca_app, LENGTH: ${#aca_app}"
 ##############################################################################################
 
 ## Create the Container App
 ### SEE: https://learn.microsoft.com/en-us/azure/container-apps/containerapp-up
 ### SEE: https://learn.microsoft.com/en-us/cli/azure/containerapp?view=azure-cli-latest#az-containerapp-up(containerapp)
 ### user-assigned: specify the managed identity that we created earlier for ACR access
-### ingress "external": allows access from public internet (or VNET if environment is internal only)
+### ingress "external": allows access from public internet (or just the VNET if environment is internal only)
 ### ingress "internal": only accessible from within the Container App Environment's VNET
 ###                    - FQDN resolves only from VMs/services in the VNET
 ###                    - NOT accessible from public internet or debug console via FQDN
@@ -38,6 +37,8 @@ echo "Container App Name: $aca_app LENGTH: ${#aca_app}"
 mi_id=$(az identity show -g $RG -n $MI --query "id" -o tsv)
 echo "Managed Identity ID: "$mi_id
 
+# Creates with default: 0.5 CPU, 1 GB memory, scale from 0-10 replicas, HTTP scaler with 10 concurrent requests per replica
+# Optional: specific workload profile (see 02-aca-env.azcli)
 az containerapp create \
   --name $aca_app \
   --resource-group $RG \
@@ -47,7 +48,14 @@ az containerapp create \
   --image $ACR.azurecr.io/$app:$tag \
   --registry-identity $mi_id \
   --registry-server $ACR.azurecr.io \
-  --user-assigned $mi_id
+  --user-assigned $mi_id \
+  --workload-profile-name $aca_workload_profile
+
+# Optional: Change a Workload Profile after creation (see 02-aca-env.azcli for profile names)
+az containerapp update \
+  --name $aca_app \
+  --resource-group $RG \
+  --workload-profile-name $aca_workload_profile
 
 ### See full details
 az containerapp show -n $aca_app -g $RG
@@ -58,11 +66,46 @@ aca_fqdn=$(az containerapp show -n $aca_app -g $RG \
     --output tsv)
 echo "FQDN: $aca_fqdn"
 
-### Test the Container App with curl
+
+## 1. IMPORTANT: Accessing the Container App with Internal Environment
+## Get Internal IP for Container Apps with Internal Ingress
+## For internal-only container apps (ingress="internal"):
+##   - FQDN is only accessible from VMs/services within the same VNET
+##   - FQDN does NOT resolve from debug/exec console (use localhost or container IP instead)
+##   - Use FQDN from: VMs in VNET, VPN/Bastion connections, or other container apps in same environment
+
+## Get the FQDN (works for both internal and external ingress)
+aca_fqdn=$(az containerapp show -n $aca_app -g $RG \
+    --query 'properties.configuration.ingress.fqdn' \
+    --output tsv)
+echo "FQDN: $aca_fqdn"
+
+### Get the static IP of the Container App Environment (if configured)
+### This is the ingress IP that routes to all apps in the environment
+aca_env_static_ip=$(az containerapp env show -n $ACA_ENV -g $RG \
+    --query 'properties.staticIp' \
+    --output tsv)
+echo "Container App Environment Static IP: $aca_env_static_ip"
+
+## Need to resolve the FQDN: To curl an Azure Container App in an internal environment from a jumpbox in the same VNet, you must ensure that DNS resolution is correctly configured, as Azure does not automatically resolve internal Container App FQDNs for VMs in the VNet by default
+## SEE: https://learn.microsoft.com/en-us/answers/questions/5818763/internal-dns-zone-for-container-apps-is-not-being
+## To enable DNS resolution for internal Container Apps, you can create a Private DNS Zone and link it to your VNet...
+### OR... you can manually add entries to the /etc/hosts file on your jumpbox VM to resolve the Container App's internal FQDN to its internal IP address.
+
+## NOTE: Bastion Clipboard: use top right icon to copy from local machine clipboard to Bastion: then right click in the Bastion terminal to paste
+## Modify /etc/hosts on the jumpbox VM to resolve the Container App's internal FQDN to its internal IP address (replace with actual values):
+## NOTE: need to use sudo to edit /etc/hosts, and the format is: <internal-ip> <internal-fqdn>
+echo "<internal-ip> <internal-fqdn>" | sudo tee -a /etc/hosts
+
+## Test connectivity to the Container App from the jumpbox VM using the internal FQDN (replace with actual internal FQDN)
+curl https://<internal-fqdn>/version
+
+## 2. External Environment: Can test the Container App with curl from local machine or from the debug container (which has curl installed, unlike the exec container)
 ### NOTE: the container app can be accessed via http OR https://<>, (HTTP gets redirected to HTTPS)
 ### NOTE: Use the URL WITHOUT the target port (which is for the internal container port)
-### NOTE: Only works if ingress is set to "external"
-###       If "internal", FQDN only works from VMs/services in the VNET (NOT from debug console - use localhost there)
+### NOTE: curl Only works if ingress is set to "external"
+###       If Environment "internal", FQDN only works from VMs/services inside the VNET (NEITHER from app container nor debug console)
+###       If Environment "internal", create a VM in the same VNET to test
 curl "https://"$aca_fqdn"/version"
 
 ##############################################################################################
@@ -119,25 +162,6 @@ exit
 
 ##############################################################################################
 
-# Get Internal IP for Container Apps with Internal Ingress
-## NOTE: For internal-only container apps (ingress="internal"):
-##   - FQDN is only accessible from VMs/services within the same VNET
-##   - FQDN does NOT resolve from debug/exec console (use localhost or container IP instead)
-##   - Use FQDN from: VMs in VNET, VPN/Bastion connections, or other container apps in same environment
-
-## Get the internal FQDN (works for both internal and external ingress)
-aca_internal_fqdn=$(az containerapp show -n $aca_app -g $RG \
-    --query 'properties.configuration.ingress.fqdn' \
-    --output tsv)
-echo "Internal FQDN: $aca_internal_fqdn"
-
-### Get the static IP of the Container App Environment (if configured)
-### This is the ingress IP that routes to all apps in the environment
-aca_env_static_ip=$(az containerapp env show -n $ACA_ENV -g $RG \
-    --query 'properties.staticIp' \
-    --output tsv)
-echo "Container App Environment Static IP: $aca_env_static_ip"
-
 ### Get replica information
 ### NOTE: Container replica IPs are not directly exposed in the CLI output
 ### The replicas are accessed via the FQDN which load balances across all replicas
@@ -182,6 +206,8 @@ echo "Container IP: $mi_ip"
 ### WORKS! Then use it to curl directly (replace with actual IP from above)
 ### NOTE: Container IPs are ephemeral and change on restart/scale
 curl http://$mi_ip:8080/version 
+
+100.100.207.142
 
 # Or check network interfaces:
 ip addr show

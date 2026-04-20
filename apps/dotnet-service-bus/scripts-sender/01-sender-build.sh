@@ -8,14 +8,14 @@ cd apps/dotnet-service-bus
 dotnet new list
 
 # Initial creation of the app
-app="ServiceBus.Sender"
+app="SB.ExampleSender"
 
 # ASP.NET Core Web API (most common for container apps). Minimal APIs work great for lightweight services
 dotnet new webapi -n $app --framework net10.0
 cd $app
 
 # Add Packages
-dotnet add reference ../ServiceBus.Utils/ServiceBus.Utils.csproj
+dotnet add reference ../SB.Utils/SB.Utils.csproj
 
 ## dotnet commands
 dotnet clean

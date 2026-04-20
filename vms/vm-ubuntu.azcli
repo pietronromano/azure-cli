@@ -1,28 +1,24 @@
+# Create a VM with cloud-init script to install nginx and serve a simple webpage
 
-#
+# Pre-requisites:
+- Resource Group: SEE: identity/managed-identity.azcli
+- VNet: SEE: vnet/01-vnet-create.azcli
+
+# Variables
+## RUN: login.azcli for .env variables, login and subscription selection
+echo $ENV_VARS
+
 username="pietronromano"
+subnet_jumbbox="snet-jumpbox"
+vm="vm-jumpbox"
+vm_size="Standard_D2ds_v6"
 
-# Resource group
-rg="rg-eus"
-location="eastus2"
-
-rg="rg-neu"
-location="northeurope"
-
-az group create --name $RG --location $location
-
-# vnet
-vnet="vnet-eus"
-vnet="vnet-neu"
-
-subnet="front-tier"
-subnet="middle-tier"
-subnet="back-tier"
-
-# vm
-vm="vm-neu-front"
-vm="vm-neu-middle"
-vm="vm-neu-back"
+# Create a specific subnet if needed
+az network vnet subnet create \
+    --resource-group $RG \
+    --vnet-name $VNET \
+    --name $subnet_jumbbox \
+    --address-prefixes 10.0.2.0/24
 
 # List existing vms
 az vm list --resource-group $RG -o table
@@ -30,11 +26,11 @@ az vm list --resource-group $RG -o table
 # List vm images
 az vm image list --output table
 # List available skus (--all lists ALL skus, available or not) --size Standard_D
-az vm list-skus --location $location  --output table
+az vm list-skus --location $LOCATION  --output table
 
 ## NOTE: MUST execute this command from the SAME folder as the cloud-init: 
 ## otherwise cloud-init won't be included and no warning is given
-cd /Users/macbookpro/dev/azure/azcli/vm
+cd /Users/macbookpro/dev/azure/github/azure-cli/vms
 cloud_init="vm-ubuntu-cloud-init.txt"
 # Check we're here
 cat $cloud_init
@@ -43,26 +39,32 @@ az vm create \
     --resource-group $RG \
     --name $vm \
     --image Ubuntu2404 \
-    --size Standard_D2ds_v6 \
+    --size $vm_size \
     --admin-username $username \
     --generate-ssh-keys \
     --vnet-name $VNET \
-    --subnet $subnet \
+    --subnet $subnet_jumbbox \
     --custom-data $cloud_init
 
-az vm auto-shutdown -g $RG -n $vm --time 1730 --email "pietronromano@live.com" 
+az vm auto-shutdown -g $RG -n $vm --time 1800 --email "pietronromano@live.com" 
 
-# Open ports
+# Open ports if needed
 az vm open-port --port 80 --resource-group $RG --name $vm
-
 
 # Connect
 ip=$(az vm show --show-details --resource-group $RG --name $vm --query publicIps --output tsv)
 echo $ip
 
+# generate-ssh keys: stores the private key in ~/.ssh/id_rsa and public key in ~/.ssh/id_rsa.pub by default, unless you specify a different path with -f. 
+# If the files already exist, it will prompt you to overwrite them. You can also specify a passphrase with -N, or leave it empty for no passphrase.
 ## private key is here by default: /Users/macbookpro/.ssh, I also copied it to azcli folder
 ssh -i ~/.ssh/id_rsa $username@$ip
 curl $ip
+
+# Generate SSH keys if you don't have them already (or specify a different path with -f)
+ssh-keygen -t rsa -b 2048 -f id_rsa -N ""
+# Use chmod to enhance security by assigning read-only access to your private key.
+chmod 400 /Users/macbookpro/dev/azure/github/azure-cli/vms/id_rsa
 
 
 ## From inside VM, 

@@ -1,4 +1,4 @@
-# ServiceBus.Processor
+# SB.ExampleProcessor
 
 # Create a new Worker project and add the necessary packages for Azure Service Bus and Azure Identity. 
 
@@ -9,14 +9,14 @@ cd apps/dotnet-service-bus
 dotnet new list
  
 # Initial creation of the app
-app="ServiceBus.Processor"
+app="SB.ExampleProcessor"
 
 # Worker project (most common for background services). 
 dotnet new worker -n $app --framework net10.0
 cd $app
 
 # Add Packages
-dotnet add reference ../ServiceBus.Utils/ServiceBus.Utils.csproj
+dotnet add reference ../SB.Utils/SB.Utils.csproj
 
 ## dotnet commands
 dotnet clean

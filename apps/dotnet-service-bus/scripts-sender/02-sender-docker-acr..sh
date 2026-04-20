@@ -2,21 +2,21 @@
 # Docker Build
 
 # Move to the app directory
-cd apps/dotnet-service-bus/ServiceBus.Sender
+cd apps/dotnet-service-bus/SB.ExampleSender
 
 # repository name must be lowercase
-app="sbsender"
+app="sbsend"
 cnt="cnt-${app}"
 img="img-${app}"
 host_port="8080"
 container_port="8080"
-tag="v1.0.0"
+tag="v3.1.0-sessions"
 
 ## [Start Docker if not already started]: build, force emulation when running on Mac
 
 ## NOTE! Notice the two ".." at the end instead of just one "." 
 ## This tells Docker to use the parent directory (dotnet-service-bus) as the build context, 
-##which gives access to both ServiceBus.Sender and ServiceBus.Utils directories.
+##which gives access to both SB.ExampleSender and SB.Utils directories.
 docker image build --platform linux/x86_64 -t $img -f Dockerfile ..
 
 ## Run
@@ -50,9 +50,8 @@ curl http://localhost:$host_port/process
 
 ## Create the variables, note ACR can't have dashes in its name, so we need to remove them
 # $ACR is defined in shared .env file 
-tag="v1.0.0"
 acr_repo="${ACR}.azurecr.io/${app}:${tag}"
-
+echo "ACR Repo: $acr_repo"
 
 ## Prexisting Container Registry: SEE: aca/aca-acr-env.azcli for details on creation
 

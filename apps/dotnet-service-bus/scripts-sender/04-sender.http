@@ -1,0 +1,8 @@
+@hostAddress = http://localhost:5141
+
+###
+GET {{hostAddress}}/send?message=session3-batch&num=10&sessionId=session3
+
+Accept: application/json
+
+###

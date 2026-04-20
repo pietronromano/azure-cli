@@ -3,8 +3,10 @@
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
     <Nullable>enable</Nullable>
+    <DefaultNamespace>SB.ExampleProcessor</DefaultNamespace>
     <ImplicitUsings>enable</ImplicitUsings>
-    <UserSecretsId>dotnet-ServiceBus.Processor-f01caef1-5172-4a40-b9d3-9cb6be60e082</UserSecretsId>
+    <DockerDefaultTargetOS>Linux</DockerDefaultTargetOS>
+    <UserSecretsId>dotnet-SB.ExampleProcessor-f01caef1-5172-4a40-b9d3-9cb6be60e082</UserSecretsId>
   </PropertyGroup>
 
   <ItemGroup>
@@ -12,6 +14,6 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\ServiceBus.Utils\ServiceBus.Utils.csproj" />
+    <ProjectReference Include="..\SB.Utils\SB.Utils.csproj" />
   </ItemGroup>
 </Project>

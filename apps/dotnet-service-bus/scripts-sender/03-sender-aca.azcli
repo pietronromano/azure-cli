@@ -13,7 +13,7 @@ echo $ENV_VARS
 # $ACR is defined in shared .env file 
 tag="v1.0.0"
 acr_repo="${ACR}.azurecr.io/${app}:${tag}"
-app="sbsender"
+app="sbsend"
 host_port="8080"
 container_port="8080"
 target_port=$container_port
@@ -23,8 +23,12 @@ mi="${ORG}-mi-${PROJECT}"
 # PREXISTING Container Apps Environment, SEE: aca/aca-acr-env.azcli
 aca_env="${ORG}-acaenv-${PROJECT}"
 
+# See messaging/service-bus.azcli for Service Bus Namespace and Queue variables: sb_namespace, sb_queue
+echo "Service Bus Namespace: $sb_namespace"
+echo "Service Bus Queue: $sb_queue"
+
 # NOTE! must be less than 32 characters
-aca_app="${ORG}-aca-${PROJECT}-sbsender"
+aca_app="${ORG}-aca-${PROJECT}-${app}"
 echo "ACA App Name: ${aca_app}  Length:${#aca_app}"
 
 ##############################################################################################
@@ -38,35 +42,39 @@ echo "ACA App Name: ${aca_app}  Length:${#aca_app}"
 mi_id=$(az identity show -g $RG -n $MI --query "id" -o tsv)
 echo "Managed Identity ID: "$mi_id
 
-# Go back to the app folder for the environment variables and secrets
-cd apps/dotnet-service-bus/ServiceBus.Sender
-source .env
-echo "MANAGED_IDENTITY_CLIENT_ID: $MANAGED_IDENTITY_CLIENT_ID"
-echo "SERVICE_BUS_NAMESPACE: $SERVICE_BUS_NAMESPACE"
-echo "SERVICE_BUS_QUEUE: $SERVICE_BUS_QUEUE"
+managed_identity_client_id=$(az identity list -g $RG --query "[?name=='$MI'].clientId" -o tsv)
+echo "managed-identity-client-id: $managed_identity_client_id"
 
-# Secrets
-secrets="managed-identity-client-id=$MANAGED_IDENTITY_CLIENT_ID"
-echo $secrets
+secrets="managed-identity-client-id=$managed_identity_client_id"
+echo "Secrets: $secrets"
+
+idle_timeout_minutes=5
+echo "Idle Timeout (minutes): $idle_timeout_minutes"
 
 # Environment variables make reference to secrets with the syntax: env_var_name=secretref:secret_name
-env_vars="MANAGED_IDENTITY_CLIENT_ID=secretref:managed-identity-client-id"
-env_vars="$env_vars SERVICE_BUS_NAMESPACE=$SERVICE_BUS_NAMESPACE"
-env_vars="$env_vars SERVICE_BUS_QUEUE=$SERVICE_BUS_QUEUE"
-echo $env_vars
+# NOTE: Each env var must be passed as a separate argument to --env-vars 
+# Got an errror combining them with the secret and trying to pass them as a single string with spaces, like $env_vars)
+# NOTE: Startup probe failures during initial deployment are normal - the app needs time to connect to Service Bus
+#       Container Apps will retry and eventually succeed (typically 30-60 seconds)
 
 az containerapp create \
   --name $aca_app \
   --resource-group $RG \
   --environment $ACA_ENV \
   --secrets $secrets \
-  --env-vars $env_vars \
+  --env-vars MANAGED_IDENTITY_CLIENT_ID=secretref:managed-identity-client-id \
+             SERVICE_BUS_NAMESPACE=$sb_namespace \
+             SERVICE_BUS_QUEUE=$sb_queue \
+             IDLE_TIMEOUT_MINUTES=$idle_timeout_minutes \
+             ENABLE_SESSIONS=1 \
   --target-port $target_port \
   --ingress external \
   --image $ACR.azurecr.io/$app:$tag \
   --registry-identity $mi_id \
   --registry-server $ACR.azurecr.io \
-  --user-assigned $mi_id
+  --user-assigned $mi_id \
+  --cpu 0.5 \
+  --memory 1Gi
 
 ### See full details
 az containerapp show -n $aca_app -g $RG
@@ -77,9 +85,10 @@ aca_fqdn=$(az containerapp show -n $aca_app -g $RG \
     --output tsv)
 echo "FQDN: $aca_fqdn"
 
-### Test the Container App with curl
+### IF using EXTERNAL Container Apps Env: Test the Container App with curl
 ### NOTE: the container app can be accessed via http OR https://<>, (HTTP gets redirected to HTTPS)
 ### NOTE: Use the URL WITHOUT the target port (which is for the internal container port)
+### NOTE: curl needs DOUBLE QUOTES around the URL, otherwise it gets confused with the '&' character in the query string and thinks it's a separate command argument, giving an error like "curl: (6) Could not resolve host: num=10"
 curl "https://"$aca_fqdn"/send?message=HelloFromCurl&num=10"
 
 ##############################################################################################

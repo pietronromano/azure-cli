@@ -1,6 +1,8 @@
 # Ignore the .env file which contains sensitive information
 .env
 
+# Ignore .scratch files which may contain temporary data
+
 # Any compiled folders, at any level
 bin/
 obj/
@@ -8,5 +10,6 @@ obj/
 # Any .json
 *.json
 
-# Private key
+# Private / Public key
 id_rsa
+id_rsa.pub

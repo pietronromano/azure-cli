@@ -1,6 +1,10 @@
 # Deploy to Azure Container Apps Job, Scale with KEDA
 # DATE: 2026-03-17
 # RESULT: Worked fine!
+
+# References:
+- https://learn.microsoft.com/en-us/cli/azure/containerapp/job?view=azure-cli-latest#az-containerapp-job-update
+
 # NOTE: 
  - Keda should shutdown all replicas after processing messages and waiting the idle timeout ...
  - So add "MonitorIdleTimeout" to the Container App Job .Net Code to make sure it scales down to zero after processing messages and waiting the idle timeout
@@ -14,7 +18,7 @@ echo $ENV_VARS
 ## Create local variables, note ACR can't have dashes in its name, so we need to remove them
 # PREXISTING: ACR, Container Apps Environment (SEE: aca/aca-acr-env.azcli)
 # ALSO: we reuse the same Container from the Container App Processor
-app="sbprocessor"
+app="sbproc"
 # $ACR is defined in shared .env file 
 tag="v1.0.0"
 acr_repo="${ACR}.azurecr.io/${app}:${tag}"
@@ -22,54 +26,64 @@ mi="${ORG}-mi-${PROJECT}"
 aca_env="${ORG}-acaenv-${PROJECT}"
 
 # NOTE! must be less than 32 characters: CUSTOM here to differentiate from the App
-aca_app="${ORG}-aca-${PROJECT}-sbprokeda"
+aca_app="${ORG}-aca-${PROJECT}-${app}"
 echo "ACA App Name: ${aca_app}  Length:${#aca_app}"
+
+# See messaging/service-bus.azcli for Service Bus Namespace and Queue variables: sb_namespace, sb_queue
+echo "Service Bus Namespace: $sb_namespace"
+echo "Service Bus Queue: $sb_queue"
+idle_timeout_minutes=5
+echo "Idle Timeout (minutes): $idle_timeout_minutes"
 
 ##############################################################################################
 
 ## Create the Container App Job
 mi_id=$(az identity show -g $RG -n $MI --query "id" -o tsv)
-echo "Managed Identity ID: "$mi_id
+echo "Managed Identity ID: $mi_id"
 
 # Go back to the app folder for the environment variables and secrets
-cd apps/dotnet-service-bus/ServiceBus.Processor
+cd apps/dotnet-service-bus/SB.ExampleProcessor
 source .env
-echo "MANAGED_IDENTITY_CLIENT_ID: $MANAGED_IDENTITY_CLIENT_ID"
-echo "SERVICE_BUS_NAMESPACE: $SERVICE_BUS_NAMESPACE"
-echo "SERVICE_BUS_QUEUE: $SERVICE_BUS_QUEUE"
+echo "SERVICE_BUS_NAMESPACE: $sb_namespace"
+echo "SERVICE_BUS_QUEUE: $sb_queue"
 
 # Secrets
-secrets="managed-identity-client-id=$MANAGED_IDENTITY_CLIENT_ID"
-echo $secrets
+# Secret name must consist of lower case alphanumeric characters, '-', and must start and end with an alphanumeric character.
+managed_identity_client_id=$(az identity list -g $RG --query "[?name=='$MI'].clientId" -o tsv)
+echo "managed-identity-client-id: $managed_identity_client_id"
+
+secrets="managed-identity-client-id=$managed_identity_client_id"
+echo "Secrets: $secrets"
 
 # Environment variables make reference to secrets with the syntax: env_var_name=secretref:secret_name
-env_vars="MANAGED_IDENTITY_CLIENT_ID=secretref:managed-identity-client-id"
-env_vars="$env_vars SERVICE_BUS_NAMESPACE=$SERVICE_BUS_NAMESPACE"
-env_vars="$env_vars SERVICE_BUS_QUEUE=$SERVICE_BUS_QUEUE"
-env_vars="$env_vars IDLE_TIMEOUT_MINUTES=$IDLE_TIMEOUT_MINUTES"
-echo $env_vars
+# NOTE: Each env var must be passed as a separate argument to --env-vars 
+# Got an error combining them with the secret and trying to pass them as a single string with spaces, like $env_vars)
 
 # Create the Container App Job with KEDA scaling based on Service Bus Queue length
 # SEE: In Portal, menu "Event-driven scaling" appears after creation
 
+# NOTE parallelism: the number of simultaneous executions processing messages
 az containerapp job create \
   --name $aca_app \
   --resource-group $RG \
   --environment $ACA_ENV \
+  --workload-profile-name Consumption \
   --secrets $secrets \
-  --env-vars $env_vars \
+  --env-vars MANAGED_IDENTITY_CLIENT_ID=secretref:managed-identity-client-id \
+             SERVICE_BUS_NAMESPACE=$sb_namespace \
+             SERVICE_BUS_QUEUE=$sb_queue \
+             IDLE_TIMEOUT_MINUTES=$idle_timeout_minutes \
   --image $ACR.azurecr.io/$app:$tag \
   --registry-server $ACR.azurecr.io \
   --registry-identity $mi_id \
   --user-assigned $mi_id \
-  --min-executions 0 \
-  --max-executions 10 \
+  --parallelism 2 \
   --trigger-type "Event" \
   --scale-rule-name azure-servicebus-queue-rule \
   --scale-rule-type azure-servicebus \
   --scale-rule-identity $mi_id \
-  --scale-rule-metadata "namespace=$SERVICE_BUS_NAMESPACE" \
-                        "queueName=$SERVICE_BUS_QUEUE" \
+  --scale-rule-metadata "namespace=$sb_namespace" \
+                        "queueName=$sb_queue" \
                         "messageCount=1"
 
 ### See full details
@@ -78,12 +92,17 @@ az containerapp job show -n $aca_app -g $RG
 ### NO fqdn as this just listens to the Service Bus, no ingress configured
 ## We will test it by sending messages to the Service Bus queue and checking if they are processed correctly by looking at the logs.
 
-# Put more max-executions to create more replicas when there are many messages in the queue
+# Put more parallelism to create more replicas when there are many messages in the queue
 # SEE Portal: "Scale" menu of the Container App Job, "Max Executions" setting
+# NOTE parallelism: the number of simultaneous executions processing messages
 az containerapp job update \
   --name $aca_app \
   --resource-group $RG \
-  --max-executions 10
+  --image $ACR.azurecr.io/$app:$tag \
+  --parallelism 10
+
+
+
 
 ##############################################################################################
 
@@ -112,6 +131,43 @@ az containerapp job replica list \
 
 
 ## NO EXEC for Container App Jobs, only for regular Container Apps, SEE: https://learn.microsoft.com/en-us/azure/container-apps/container-debug-console?tabs=bash#debug-a-container-app-job --- IGNORE ---
+
+##############################################################################################
+
+# NOTE! BE CAREFUL NO TAGS POLICIES IMPEDING RUN
+{'Enabled':true,'StartTimeUTC':{'SUN':6,'MON':6,'TUE':6,'WED':6,'THU':6,'FRI':6,'SAT':6},'StopTimeUTC':{'SUN':22,'MON':22,'TUE':22,'WED':22,'THU':22,'FRI':22,'SAT':22},'StartOrder':0,'StopOrder':0,'StartWaitSeconds':0,'StopWaitSeconds':0}
+
+
+# KUSTO queries for Container App Jobs monitoring, SEE: https://learn.microsoft.com/en-us/azure/container-apps/monitor-container-apps-with-kusto-queries
+
+# Pre-requisite: obtain the law_id monitor/log-analytics-ws.azcli
+law_id=$(az monitor log-analytics workspace show \
+  --resource-group $RG \
+  --workspace-name $LAW \
+  --query customerId -o tsv)
+echo "law_id: $law_id"
+
+
+# NOTE: The --output table formatter in Azure CLI often alphabetically sorts or reorders columns for better visual presentation, 
+# which is why it may not match your KQL projection order
+
+
+## Get all executions with details in json format
+kusto_query="ContainerAppConsoleLogs_CL | where ContainerJobName_s == '${aca_app}' "
+kusto_query="$kusto_query | project time_t, ContainerImage_s, ContainerJobName_s, Log_s"
+kusto_query="$kusto_query | order by time_t desc"
+echo "Kusto Query: $kusto_query"
+
+az monitor log-analytics query \
+  --workspace $law_id \
+  --analytics-query "$kusto_query" \
+  --output json > "apps/dotnet-service-bus/scripts-processor/${app}-logs.json"
+
+# Or use tsv for tab-separated values (NOTE: CLI doesn't preserve column order, this does work in Portal):
+az monitor log-analytics query \
+  --workspace $law_id \
+  --analytics-query "$kusto_query" \
+  --output tsv > "apps/dotnet-service-bus/scripts-processor/${app}-logs.tsv"
 
 
 ##############################################################################################

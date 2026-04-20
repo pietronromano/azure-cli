@@ -13,13 +13,17 @@ References:
 ## VS Code: 
 - for local build and debug, open the dotnet-service-bus folder in VS Code 
 
+- Open same folder twice in VS Code, one for sender and one for receiver, to enable debugging both at the same time.
+- In the first VS Code window, dotnet-service-bus folder 
+- For the second VS Code Window: Vs Code -> File -> Open Workspace from File -> select the dotnet-service-bus-1st.code-workspace file
+
 ---
 
-## ServiceBus.Utils
+## SB.Utils
 
 ```bash
-dotnet new classlib -n ServiceBus.Utils -f net10.0
-cd ServiceBus.Utils
+dotnet new classlib -n SB.Utils -f net10.0
+cd SB.Utils
 
 # Add Packages
 dotnet add package Azure.Identity

@@ -6,13 +6,12 @@
 
 
 # Variables
-
-
 ## RUN: login.azcli for .env variables, login and subscription selection
 ## Env Vars: TENANT, SUBSCRIPTION, ORG, LOCATION, PROJECT, RG
-
 sb_namespace="${ORG}-sb-${PROJECT}"
-sb_queue="testqueue"
+sb_queue="billing-queue"
+echo "Service Bus Namespace: $sb_namespace"
+echo "Service Bus Queue: $sb_queue"
 
 
 
@@ -20,12 +19,30 @@ sb_queue="testqueue"
 az group create --name $RG --location $LOCATION
 
 # Create a Service Bus namespace and Queue
-
 ## Run the following command to create a Service Bus messaging namespace.
 az servicebus namespace create --resource-group $RG --name $sb_namespace --location $LOCATION
 
-## Run the following command to create a queue in the namespace you created in the previous step. In this example, $RG is the resource group you created in the previous step. $sb_namespace is the name of the Service Bus namespace created in that resource group.
+## Run the following command to create a queue in the namespace you created in the previous step. 
 az servicebus queue create --resource-group $RG --namespace-name $sb_namespace --name $sb_queue
+
+## If you want to enable sessions, add the following argument to the queue creation command:
+--enable-session true
+
+## NOTE: Sessions can only be enabled on Creating the queue or subscription, they cannot be enabled on an existing queue or subscription.
+    
+
+####################################################################
+
+# Use the az servicebus queue show command to get the message count details for a queue:
+az servicebus queue show --resource-group $RG \
+    --namespace-name $sb_namespace \
+    --name $sb_queue \
+    --query countDetails
+
+# Here's a sample output:
+ActiveMessageCount    DeadLetterMessageCount    ScheduledMessageCount    TransferMessageCount    TransferDeadLetterMessageCount
+--------------------  ------------------------  -----------------------  ----------------------  --------------------------------
+0                     0                         0                        0                       0
 
 
 #####################################################################
@@ -47,6 +64,8 @@ az role assignment create \
   --assignee $principalId \
   --role "Azure Service Bus Data Owner" \
   --scope $sb_namespace_id
+
+### NOTE: To view messages in the Portal, the logged-in user needs at least "Azure Service Bus Data Receiver" role assignment at the namespace scope. The "Owner" and "Sender" roles do not have access to view messages in the Portal.
 
 ## Verify the role assignment: (SEE also Portal: Managed Identiy: Azure role assignments)
 az role assignment list \

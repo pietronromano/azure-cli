@@ -5,5 +5,24 @@
 			"path": "."
 		}
 	],
-	"settings": {}
+	"settings": {
+		"dotnet.defaultSolution": "dotnet-service-bus.sln"
+	},
+	"launch": {
+		"version": "0.2.0",
+		"configurations": [
+			{
+				"name": "Sender Debug",
+				"type": "dotnet",
+				"request": "launch",
+				"projectPath": "${workspaceFolder:dotnet-service-bus}/SB.ExampleSender/SB.ExampleSender.csproj"
+			},
+			{
+				"name": "Processor Debug",
+				"type": "dotnet",
+				"request": "launch",
+				"projectPath": "${workspaceFolder:dotnet-service-bus}/SB.ExampleProcessor/SB.ExampleProcessor.csproj"
+			}
+		]
+	}
 }

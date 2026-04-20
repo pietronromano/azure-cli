@@ -5,3 +5,8 @@ obj/
 *.user
 *.suo
 *.cache
+
+.env
+.scratch.sh
+*-logs.*
+
