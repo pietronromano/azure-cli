@@ -62,9 +62,9 @@ az containerapp show \
 # yaml
   template:
     containers:
-      - image: plxacrccoepnrtest.azurecr.io/dotnethttpserver:v1.0.0
+      - image: orgacrdeptpnrtest.azurecr.io/dotnethttpserver:v1.0.0
         imageType: ContainerImage
-        name: plx-aca-ccoe-pnrtest-httpserver
+        name: org-aca-dept-pnrtest-httpserver
         resources:
           cpu: 0.5
           ephemeralStorage: 2Gi

@@ -21,7 +21,7 @@ aca_app="aca-yml"
 aca_env="${PROJECT}-${aca_app}-env"
 
 # Or a preexisting ENVIRONMENT can be used, just make sure to update the environment name in the YAML file as well.
-aca_env=ccoe-pnrtest-albums-env
+aca_env=dept-pnrtest-albums-env
 
 # If needed,create resource group
 az group create -n $RG -l $LOCATION -o table
