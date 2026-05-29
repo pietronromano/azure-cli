@@ -8,12 +8,14 @@ location="eastus2"
 location="northeurope"
 location="southeastasia"
 
-az group create --name $RG --location $location
+az group create --name $RG --location $LOCATION
 
 # vnet
+
 vnet="vnet-eus"
 vnet="vnet-neu"
 vnet="vnet-sea"
+
 
 # 10.3.0.0/16 10.1.0.0/16 10.2.0.0/16 \
 # 10.3.1.0/24 10.1.1.0/24 10.2.1.0/24

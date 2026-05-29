@@ -12,24 +12,19 @@ References:
     - https://github.com/Azure/azure-sdk-for-net/blob/main/sdk/servicebus/Azure.Messaging.ServiceBus/samples/Sample05_SessionProcessor.md
 - Long Running Processing: https://github.com/Azure/azure-sdk-for-net/blob/main/sdk/servicebus/Azure.Messaging.ServiceBus/samples/Sample18_LongRunningProcessing.md
 */
-
 namespace SB.Utils;
-
 // VS Code shows this as an unused using, but it's actually used in the code. We can ignore the warning.
 using Azure.Messaging.ServiceBus;
 using Microsoft.Extensions.Logging;
-
 public class SBUtilProcessor: SBUtilBase
 {
     private  ServiceBusProcessor _processor;
     private  ServiceBusSessionProcessor _sessionProcessor;
-
     private DateTime _lastMessageTime;
     private CancellationTokenSource _shutdownCts;
     private int _consecutiveErrors = 3;
     private int _maxConsecutiveErrors = 5;
     private int _instanceMessageCount = 0; // Counter to track number of messages processed for this instance, for logging purposes
-
     private readonly int _idleTimeoutMinutes = 5; // in minutes, default to 5 minutes of idle time before shutdown. Adjust based on expected message frequency and processing time. Set it to at least the longest expected time between messages, plus some margin for safety.
     
     //Long Running Processing:
@@ -40,13 +35,13 @@ public class SBUtilProcessor: SBUtilBase
     
     // Disable auto-complete so we settle messages explicitly after processing succeeds.          
     private bool _autoCompleteMessages = false;
-
     // Process one message at a time. Increase for higher throughput if the processing is I/O-bound rather than CPU-bound.
     // Note: MaxConcurrentCalls = 1 limits parallelism but does not guarantee processing ordering. 
     // Use sessions if message processing ordering is required.   
     private int _maxConcurrentCalls = 1;
     private bool _enableSessions = false; // Set to true if processing a session-enabled queue or subscription. Note that enabling sessions will limit you to processing one message at a time per session, even if MaxConcurrentCalls is greater than 1, since messages with the same SessionId must be processed in order.                
-
+    //We don't include in Dependency Injection because the processor needs to be initialized with the message handler before it can be used, and the message handler is typically implemented in the consuming application, not in this library.
+    private ISBUtilMessageHandler _messageHandler;
     public SBUtilProcessor(ILogger<SBUtilBase> logger): base(logger)
     {
         // Configure Environment variables
@@ -58,10 +53,8 @@ public class SBUtilProcessor: SBUtilBase
         _enableSessions = GetBoolFromEnv("ENABLE_SESSIONS", _enableSessions);
     }
 
-
     private void InitializeProcessor(string[] sessionIds = null)
     {
-
         try
         {
             if (_processor != null)
@@ -70,7 +63,6 @@ public class SBUtilProcessor: SBUtilBase
             }
             base.InitializeClient(); // Ensure client is initialized (will do nothing if already initialized)
            
-
             if (_enableSessions)
             {
                 var sessionProcessorOptions = new ServiceBusSessionProcessorOptions
@@ -112,24 +104,23 @@ public class SBUtilProcessor: SBUtilBase
             throw; // Re-throw to propagate the error to the caller
         }
     }
-
-    public async Task ProcessMessages(CancellationToken hostToken, string[] sessionIds = null)
+    public async Task ProcessMessages(ISBUtilMessageHandler messageHandler, CancellationToken hostToken, string[] sessionIds = null)
     {
         try
         {
             // Initialize processor if not already done - will throw on error
             InitializeProcessor(sessionIds);
+            // Set the message handler that will be called by the processor when messages are received
+            _messageHandler = messageHandler;
             
             string sessionInfo = (sessionIds != null && sessionIds.Length > 0) 
                     ? string.Join(",", sessionIds) : "None.";
-
             _logger.LogInformation(
                 $"Started processing messages. | " +
                 $"Host Process ID: {_envInfo.HostProcessId}. | " + 
                 $"Info GUID: {_envInfo.InfoGuid}. | " +
                 $"SessionIds: {sessionInfo}. | " +
                 $"Will shut down after {_idleTimeoutMinutes} minutes of inactivity. |");
-
             // Initialize last message time
             _lastMessageTime = DateTime.UtcNow;
             // Create a linked cancellation token source that will be cancelled when either the host signals shutdown or when we want to shut down due to idle timeout
@@ -156,7 +147,6 @@ public class SBUtilProcessor: SBUtilBase
            
             // Monitor for idle timeout
             await MonitorIdleTimeout(_shutdownCts.Token);
-
         }
         catch (Exception ex)
         {
@@ -176,7 +166,6 @@ public class SBUtilProcessor: SBUtilBase
             throw new Exception("An error occurred while processing messages. See inner exception for details.", ex);
         }
     }
-
     private async Task MonitorIdleTimeout(CancellationToken cancellationToken)
     {
         try
@@ -204,66 +193,65 @@ public class SBUtilProcessor: SBUtilBase
             _logger.LogError(ex, "An error occurred while monitoring idle timeout");    
         }
     }
-
-    private void HandleMessage(string body, long sequenceNumber, string messageId, int deliveryCount){
-        if (string.IsNullOrEmpty(body))
-        {
-            body = "<EMPTY MESSAGE BODY>";
-        }
-        else if (body.Length > 30)
-        {
-            body = body.Substring(0, 30) + "...(truncated)";
-        }
-        _instanceMessageCount++;
-        string infoMessage = $"InstanceMessageCount: {_instanceMessageCount} | "
-            + $"MessageBody: {body} | SBSequenceNumber: {sequenceNumber} | " 
-            + $"HostProcessID: {_envInfo.HostProcessId} | InfoGuid: {_envInfo.InfoGuid} | "  
-            + $"MessageId: {messageId} | DeliveryCount: {deliveryCount}  |";
-        _logger.LogInformation(infoMessage);
-
-        // Update last message time
-        _lastMessageTime = DateTime.UtcNow;
-        // Reset consecutive error counter on successful processing
-            _consecutiveErrors = 0;
-    }
     // handle received messages
     async Task MessageHandler(ProcessMessageEventArgs args)
     {
         try
         {
-            HandleMessage(args.Message.Body.ToString(), args.Message.SequenceNumber, 
-                args.Message.MessageId, args.Message.DeliveryCount);
+             _logger.LogInformation($"Received message ID {args.Message.MessageId}");
+          
+            // Call the message handler to process the message. 
+            // The handler will return true if processing succeeded, or false if it failed and the message should be abandoned (made available for re-processing).
+            bool completed = await _messageHandler.ProcessMessage(args.Message.Body.ToString(), 
+                args.Message.SequenceNumber, args.Message.MessageId, args.Message.DeliveryCount);
             
-            // complete the message. message is deleted from the queue. 
-            await args.CompleteMessageAsync(args.Message);
+            // If we complete the message, it is deleted from the queue. 
+            if (completed)
+            {
+                await args.CompleteMessageAsync(args.Message);
+            } else
+            {
+                // If processing failed, we abandon the message so it becomes available for re-processing. 
+                await args.AbandonMessageAsync(args.Message);
+                //Example of very strict processing logic: if processing fails, we want to immediately exit instead of retrying
+                _logger.LogCritical("Fatal Messaging Error. Forcing application exit with code 1");
+                Environment.Exit(1);
+            }
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error in MessageHandler");
         }
-
     }
-
     // handle Session received messages
     async Task SessionMessageHandler(ProcessSessionMessageEventArgs args)
     {
         try
         {
-            string sessionId = String.IsNullOrEmpty(args.SessionId) ? "Unknown" : args.SessionId;
+            string sessionId = String.IsNullOrEmpty(args.SessionId) ? "<no-session-id>" : args.SessionId;
             _logger.LogInformation($"Received message ID {args.Message.MessageId} for SessionId: {sessionId}");
-            HandleMessage(args.Message.Body.ToString(), args.Message.SequenceNumber, 
-                args.Message.MessageId, args.Message.DeliveryCount);
-
-            // complete the message. message is deleted from the queue. 
-            await args.CompleteMessageAsync(args.Message);
+            
+            bool completed = await _messageHandler.ProcessMessage(args.Message.Body.ToString(), 
+                args.Message.SequenceNumber, args.Message.MessageId, args.Message.DeliveryCount, sessionId);
+            
+            // If we complete the message, it is deleted from the queue. 
+            if (completed)
+            {
+                await args.CompleteMessageAsync(args.Message);
+            } else
+            {
+                // If processing failed, we abandon the message so it becomes available for re-processing. 
+                await args.AbandonMessageAsync(args.Message);
+                //Example of very strict processing logic: if processing fails, we want to immediately exit instead of retrying
+                _logger.LogCritical("Fatal Messaging Error. Forcing application exit with code 1");
+                Environment.Exit(1);
+            }
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error in MessageHandler");
         }
-
     }
-
     // handle any errors when receiving messages
     Task ErrorHandler(ProcessErrorEventArgs args)
     {
@@ -288,9 +276,7 @@ public class SBUtilProcessor: SBUtilBase
             
             if (isFatalError)
             {
-                _logger.LogCritical(
-                    args.Exception,
-                    "Fatal Service Bus error detected. Forcing application exit with code 1");
+                _logger.LogCritical(args.Exception,"Fatal Service Bus error detected. Forcing application exit with code 1");
                 Environment.Exit(1);
             }
             
@@ -312,9 +298,7 @@ public class SBUtilProcessor: SBUtilBase
             Environment.Exit(1);
             return Task.CompletedTask;
         }
-
     }
-
     async Task SessionInitializingHandler(ProcessSessionEventArgs args)
     {
         try{
@@ -328,7 +312,6 @@ public class SBUtilProcessor: SBUtilBase
             _logger.LogError(ex, "Error in SessionInitializingHandler");
         }
     }
-
     async Task SessionClosingHandler(ProcessSessionEventArgs args)
     {
         try{

@@ -8,7 +8,7 @@ cd apps/dotnet-service-bus/SB.ExampleProcessor
 app="sbproc"
 cnt="cnt-${app}"
 img="img-${app}"
-tag="v3.0.0-sessions"
+tag="v4.0.0-msghdlr"
 
 ## [Start Docker if not already started]: build, force emulation when running on Mac
 

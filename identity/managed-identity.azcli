@@ -6,7 +6,7 @@
 ##############################################################################################
 
 
-# Environment ariables
+# Environment Variables
 
 
 ## RUN: login.azcli for .env variables, login and subscription selection

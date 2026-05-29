@@ -16,8 +16,11 @@ using SB.Utils;
 public sealed class Worker(
     SBUtilProcessor sbprocessor,
     IHostApplicationLifetime hostApplicationLifetime,
-    ILogger<Worker> logger) : BackgroundService
-{
+    ILogger<Worker> logger) : BackgroundService, ISBUtilMessageHandler
+   {
+    private readonly EnvironmentInfo _envInfo = new();
+    private int _instanceMessageCount = 0;
+    private DateTime _lastMessageTime = DateTime.UtcNow;
     
     /*
         You never call ExecuteAsync directly - it's framework-managed
@@ -30,7 +33,7 @@ public sealed class Worker(
         {
             // ServiceBusUtil is injected via constructor dependency injection
             logger.LogInformation("Calling ServiceBusUtil.ProcessMessages...");
-            await sbprocessor.ProcessMessages(stoppingToken);
+            await sbprocessor.ProcessMessages(this, stoppingToken);
             
             // If we reach here, ProcessMessages returned (idle timeout)
             logger.LogInformation("ProcessMessages completed at: {time}", DateTimeOffset.Now);
@@ -54,5 +57,47 @@ public sealed class Worker(
             logger.LogInformation("Stopping the application...");
             hostApplicationLifetime.StopApplication();      
         }
+    }
+
+    public async Task<bool> ProcessMessage(string body, long sequenceNumber, string messageId, int deliveryCount, 
+                    string? sessionId = null)
+    {
+        if (string.IsNullOrEmpty(body))
+        {
+            body = "<EMPTY MESSAGE BODY>";
+        }
+        else if (body.Length > 30)
+        {
+            body = body.Substring(0, 30) + "...(truncated)";
+        }
+        _instanceMessageCount++;
+        if (String.IsNullOrEmpty(sessionId))
+        {
+            sessionId = "<NO SESSION>";
+        }
+        string processStartTime = DateTime.UtcNow.ToString("o"); // ISO 8601 format
+        string infoMessage = $"Starting Processing Message: | "
+            + $"SessionId: {sessionId} | "
+            + $"InstanceMessageCount: {_instanceMessageCount} | "
+            + $"MessageBody: {body} | SequenceNumber: {sequenceNumber} | " 
+            + $"HostProcessID: {_envInfo.HostProcessId} | InfoGuid: {_envInfo.InfoGuid} | "  
+            + $"MessageId: {messageId} | DeliveryCount: {deliveryCount} |";
+        logger.LogInformation(infoMessage);
+
+        
+        // Simulate message processing logic here: sleep for 10 seconds:
+        await Task.Delay(10000);
+        string processEndTime = DateTime.UtcNow.ToString("o"); // ISO 8601 format
+        logger.LogInformation($"Finished Processing Message with MessageId: {messageId} "
+        + $"at {processEndTime}");
+
+        // Update last message time
+        _lastMessageTime = DateTime.UtcNow;
+
+        // Simulate error handling: if the message body contains "error", throw an exception to test retry logic
+        if (body.Contains("error", StringComparison.OrdinalIgnoreCase))
+            return false;
+        else
+            return true;
     }
 }

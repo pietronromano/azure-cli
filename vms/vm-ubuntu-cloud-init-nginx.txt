@@ -1,0 +1,9 @@
+#cloud-config
+package_upgrade: true
+packages:
+  - nginx
+  - net-tools
+runcmd:
+  - [mkdir, -p, /var/www/html]
+  - [bash, -lc, 'echo "<html><body><h1>Host: $(hostname)</h1></body></html>" > /var/www/html/index.html']
+  - [systemctl, enable, --now, nginx]

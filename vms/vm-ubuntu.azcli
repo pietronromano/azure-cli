@@ -9,9 +9,15 @@
 echo $ENV_VARS
 
 username="pietronromano"
+subnet="front-tier"
 subnet_jumbbox="snet-jumpbox"
-vm="vm-jumpbox"
+vm="${ORG}-vm-${PROJECT}-host-2"
 vm_size="Standard_D2ds_v6"
+cloud_init="vms/vm-ubuntu-cloud-init-nginx.txt"
+
+# Check variables
+echo "Username: $username, Subnet: $subnet, VM Name: $vm, VM Size: $vm_size"
+cat $cloud_init
 
 # Create a specific subnet if needed
 az network vnet subnet create \
@@ -28,12 +34,6 @@ az vm image list --output table
 # List available skus (--all lists ALL skus, available or not) --size Standard_D
 az vm list-skus --location $LOCATION  --output table
 
-## NOTE: MUST execute this command from the SAME folder as the cloud-init: 
-## otherwise cloud-init won't be included and no warning is given
-cd /Users/macbookpro/dev/azure/github/azure-cli/vms
-cloud_init="vm-ubuntu-cloud-init.txt"
-# Check we're here
-cat $cloud_init
 
 az vm create \
     --resource-group $RG \
@@ -43,7 +43,7 @@ az vm create \
     --admin-username $username \
     --generate-ssh-keys \
     --vnet-name $VNET \
-    --subnet $subnet_jumbbox \
+    --subnet $subnet \
     --custom-data $cloud_init
 
 az vm auto-shutdown -g $RG -n $vm --time 1800 --email "pietronromano@live.com" 
@@ -59,13 +59,30 @@ echo $ip
 # If the files already exist, it will prompt you to overwrite them. You can also specify a passphrase with -N, or leave it empty for no passphrase.
 ## private key is here by default: /Users/macbookpro/.ssh, I also copied it to azcli folder
 ssh -i ~/.ssh/id_rsa $username@$ip
-curl $ip
+
+# Custom host header
+curl -H "Host: host1.com" $ip
 
 # Generate SSH keys if you don't have them already (or specify a different path with -f)
 ssh-keygen -t rsa -b 2048 -f id_rsa -N ""
 # Use chmod to enhance security by assigning read-only access to your private key.
 chmod 400 /Users/macbookpro/dev/azure/github/azure-cli/vms/id_rsa
 
+# cloud-init logs and nginx status
+sudo cloud-init status --long
+sudo tail -n 200 /var/log/cloud-init-output.log
+less /var/log/cloud-init-output.log
+grep "nginx" /var/log/cloud-init-output.log
+sudo ls -la /var/www
+sudo ls -la /var/www/html
+sudo systemctl status nginx --no-pager
+
+#Also verify what custom data the VM actually has:
+sudo ls -la /var/lib/cloud/instance
+sudo grep -R "Host:" /var/lib/cloud -n
+
+
+exit
 
 ## From inside VM, 
 ### curl to http site (NOTE: 502 Bad Gateway will happen if admin-username doesn't match init owner)
@@ -83,14 +100,7 @@ nslookup vm-neu-front
 arp-an
 
 
-### Debug the clout-init logs:
-less /var/log/cloud-init-output.log
-grep "nginx" /var/log/cloud-init-output.log
-
-exit
-
-
-# NOTE! After stopping, node.js app doesn't restart automatically -> have to start manually
+# NOTE for node-init! After stopping, node.js app doesn't restart automatically -> have to start manually
 pietronromano@vm-eus-front:~$ cd "/home/pietronromano/myapp"
 pietronromano@vm-eus-front:/home/pietronromano/myapp$ nodejs index.js
 Hello world app listening on port 3000!

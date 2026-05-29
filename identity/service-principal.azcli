@@ -1,0 +1,80 @@
+# Create Service Principal in Azure
+- 1. Create a service principal.
+- 2. Assign an appropriate role to your service principal.
+
+References:
+- https://learn.microsoft.com/en-us/azure/active-directory/develop/app-objects-and
+
+##############################################################################################
+
+# Environment Variables
+
+
+## RUN: login.azcli for .env variables, login and subscription selection
+echo $ENV_VARS
+
+## 1. Create a service principal
+### We use the Azure CLI to create a service principal in your desired resource group and LOCATION.
+
+### Local Variables
+sp_name="${ORG}-sp-${PROJECT}"
+sp_role="Contributor"
+
+## Create Resource Group
+az group create --name $RG --location $LOCATION
+
+NOTE!
+Directory permission is needed for the current user to register the application. 
+For how to configure, please refer 'https://learn.microsoft.com/azure/azure-resource-manager/resource-group-create-service-principal-portal'. 
+Original error: Insufficient privileges to complete the operation.
+
+### Create the service principal
+az ad sp create-for-rbac \
+            --name $sp_name \
+            --role $sp_role \
+            --scopes /subscriptions/$AZURE_SUBSCRIPTION_ID/resourceGroups/$RG
+
+### List existing service principals
+az ad sp list --display-name $sp_name
+
+### Get the clientId from our service principal by name
+AZURE_CLIENT_ID=$(az ad sp list --display-name $sp_name --query "[0].appId" -o tsv)
+echo "AZURE_CLIENT_ID: $AZURE_CLIENT_ID"
+
+### Get the tenantId from our service principal by name
+AZURE_TENANT_ID=$(az ad sp list --display-name $sp_name --query "[0].appOwnerTenantId" -o tsv)
+echo "Tenant ID: $AZURE_TENANT_ID"
+
+## The service principal's 'id' field contains the full resource ID like:
+### /subscriptions/{subscription-id}/resourceGroups/{RG}/providers/Microsoft.ManagedIdentity/userAssignedIdentities/{mi}
+### Extract subscription ID from the service principal's resource ID
+### cut -d'/' -f3 splits that string by / and takes the 3rd field. 
+### Because the string starts with /, field 1 is empty, field 2 is subscriptions, and field 3 is the actual subscription ID
+AZURE_SUBSCRIPTION_ID=$(az ad sp show --id $AZURE_CLIENT_ID --query "id" -o tsv | cut -d'/' -f3)
+echo "Subscription ID: $AZURE_SUBSCRIPTION_ID"
+
+## Alternatively, you can also get the subscription ID from the current Azure CLI context:
+AZURE_SUBSCRIPTION_ID=$(az account show --query "id" -o tsv)
+echo "Subscription ID from CLI context: $AZURE_SUBSCRIPTION_ID"
+##############################################################################################
+
+# 2. Assign an appropriate role to your service principal.
+
+## Get the principal ID of the service principal
+principalId=$(az ad sp show --id $AZURE_CLIENT_ID --query "id" -o tsv)
+echo "Principal ID: $principalId"
+
+## Assign the role at the resource group scope
+az role assignment create \
+  --assignee $principalId \
+  --role $mi_role \
+  --scope "/subscriptions/$AZURE_SUBSCRIPTION_ID/resourceGroups/$RG"
+
+## Verify the role assignment: (SEE also Portal: Managed Identiy: Azure role assignments)
+az role assignment list \
+  --assignee $principalId \
+  --scope "/subscriptions/$AZURE_SUBSCRIPTION_ID/resourceGroups/$RG" \
+  --output table
+
+##############################################################################################
+

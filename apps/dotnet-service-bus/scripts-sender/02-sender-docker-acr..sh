@@ -10,7 +10,7 @@ cnt="cnt-${app}"
 img="img-${app}"
 host_port="8080"
 container_port="8080"
-tag="v3.1.0-sessions"
+tag="v4.0.0-msghdlr"
 
 ## [Start Docker if not already started]: build, force emulation when running on Mac
 

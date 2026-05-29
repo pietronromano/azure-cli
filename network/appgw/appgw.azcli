@@ -7,16 +7,16 @@
 # RESULTS: WORKED GREAT
 
 # Variables
-rg="rg-appgw"
-location="northeurope"
-vnet="vnet-appgw"
+rg=$RG
+location=$LOCATION
+vnet=$VNET
 username="pietronromano"
 subnet_appgw="subnet-appgateway"
 cidrs=("10.0.1.0" "10.0.2.0")
 backends=("images" "video")
 
 pip_appgw="pip-appgateway"
-appgw="appgateway-01"
+appgw="agw-01"
 appgw_pathmap="pathmap-backends"
 appgw_routing_rule="rule-pathmap-to-backends"
 
@@ -47,7 +47,7 @@ done
 # Create VMs
 ## NOTE: must execute this command from the SAME folder as the cloud-init: otherwise won't be included and no warning is given
 cd /Users/macbookpro/dev/azure/azcli/network/appgw
-cloud_init="cloud-init.txt"
+cloud_init="network/appgw/cloud-init.txt"
 cat $cloud_init
 
 ##  OPTION 1: Ubuntu
@@ -185,6 +185,11 @@ pip_appgw_ip=$(az network public-ip show \
   --name $pip_appgw \
   --query ipAddress \
   --output tsv)
+
+# Custom host header # 
+pip_appgw_ip="20.105.21.46" 
+curl $pip_appgw_ip
+curl -H "Host: host-2" $pip_appgw_ip
 
 ## Going through AppGW, Wireshark on VM shows origin IP as AppGW public IP
     ## Test routing through AppGW, using /images/ and /video/

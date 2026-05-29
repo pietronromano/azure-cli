@@ -1,4 +1,5 @@
 # Service Bus with Managed Identity 
+Sample code (NOT PRODUCTION QUALITY) based on the Azure SDK for .NET, demonstrating how to use Azure Service Bus with Managed Identity for authentication. This sample includes both a sender and a receiver application.
 
 References:
 - https://learn.microsoft.com/en-us/samples/azure/azure-sdk-for-net/azuremessagingservicebus-samples/

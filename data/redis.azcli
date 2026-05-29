@@ -1,0 +1,12 @@
+# !/bin/bash
+# References: https://learn.microsoft.com/en-us/azure/redis/scripts/create-manage-cache?pivots=azure-managed-redis
+
+cache="redis-cache-$randomIdentifier"
+sku="Balanced_B1"
+
+# Create a Balanced B1 Azure Managed Redis cache
+echo "Creating $cache"
+az redisenterprise create --name $cache \
+    --resource-group $RG \
+    --location "$LOCATION" \
+    --sku $sku
