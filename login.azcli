@@ -10,11 +10,14 @@
 
 clear
 echo "CURRENT DIRECTORY: $(pwd)"
-source /Users/macbookpro/dev/azure/github/azure-cli/.env
+source .env
 
 ENV_VARS="TENANT:$TENANT, SUBSCRIPTION:$SUBSCRIPTION, ORG:$ORG, LOCATION:$LOCATION, PROJECT:$PROJECT, RG:$RG " 
 ENV_VARS="$ENV_VARS, ACR:$ACR SA:$SA MI:$MI ACA_ENV:$ACA_ENV AKS_CLU:$AKS_CLU VNET:$VNET LAW:$LAW"
 echo "ENV_VARS: $ENV_VARS"
+
+# WINDOWS: MSYS_NO_PATHCONV=1 prevents Git Bash from converting /subscriptions/... resource IDs to Windows paths
+export MSYS_NO_PATHCONV=1 
 
 # Check Azure CLI version
 az version

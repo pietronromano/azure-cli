@@ -18,12 +18,12 @@ tag="v1.0.0"
 
 ## [Start Docker if not already started]: build, force emulation when running on Mac
 docker image list
-docker image build --platform linux/x86_64 -t $img -f Dockerfile .
+docker image build --platform linux/amd64 -t $img -f Dockerfile .
 
 ## Run
 docker container list 
 docker container run  --name $cnt \
-    --platform linux/x86_64 -it \
+    --platform linux/amd64 -it \
     -p $host_port:$container_port $img
 
 ## Cleanup

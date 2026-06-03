@@ -4,6 +4,7 @@
 # Move to the app directory
 cd apps/dotnet-http-server/app
 
+
 ## Initial creation of the app
 app="DotNetHttpServer"
 dotnet new webapp -n $app --framework net10.0

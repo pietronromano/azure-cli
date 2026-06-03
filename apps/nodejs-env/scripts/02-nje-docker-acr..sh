@@ -14,14 +14,14 @@ img="img-${app}"
 tag="v1.0.0"
 
 ## [Start Docker if not already started]: build, force emulation when running on Mac
-docker image build --platform linux/x86_64 -t $img -f Dockerfile .
+docker image build --platform linux/amd64 -t $img -f Dockerfile .
 
 ## Run
 docker container list 
 
 # This will run the app.js which will automatically write the logs to the console
 docker container run  --name $cnt \
-    --platform linux/x86_64 -it $img
+    --platform linux/amd64 -it $img
 
 ## Cleanup
 docker container rm -f $cnt

@@ -45,13 +45,16 @@ echo "Subnet ACA ID: $subnet_aca_id"
 ## Create ContainerApps Env: 
 ### internal-only false: allows access from anywhere (instead of just vnet) NOTE: FOR EDUCATION AND TESTING ONLY
 ### internal-only true: just vnet access, (although we can still use the debug console to curl into it)
-internal_only=true
+internal_only=false
 # Pre-requisite: obtain the law_id and law_key from monitor/log-analytics-ws.azcli
+# MSYS_NO_PATHCONV=1 prevents Git Bash from converting /subscriptions/... resource IDs to Windows paths
+export MSYS_NO_PATHCONV=1 
+
 az containerapp env create \
     --name $ACA_ENV \
     --resource-group $RG \
     --location $LOCATION \
-    --infrastructure-subnet-resource-id $subnet_aca_id \
+    --infrastructure-subnet-resource-id "${subnet_aca_id}" \
     --internal-only $internal_only \
     --logs-workspace-id $law_id \
     --logs-workspace-key $law_key

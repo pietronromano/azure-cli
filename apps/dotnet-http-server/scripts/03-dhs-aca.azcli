@@ -14,16 +14,16 @@ container_port="8080"
 target_port=$container_port
 
 
-# PREXISTING Container Apps Environment, SEE: aca/aca-acr-env.azcli
+# PREXISTING Container Apps Environment, SEE: aca/02-aca-env.azcli
 
 # NOTE! must be less than 32 characters
-aca_app="${ORG}-aca-${PROJECT}-httpserver"
+aca_app="${ORG}-aca-${PROJECT}-server"
 echo "Container App Name: $aca_app LENGTH: ${#aca_app}"
 ##############################################################################################
 
 ## Create the Container App
-### SEE: https://learn.microsoft.com/en-us/azure/container-apps/containerapp-up
-### SEE: https://learn.microsoft.com/en-us/cli/azure/containerapp?view=azure-cli-latest#az-containerapp-up(containerapp)
+### SEE: https://learn.microsoft.com/en-us/cli/azure/containerapp?view=azure-cli-latest
+
 ### user-assigned: specify the managed identity that we created earlier for ACR access
 ### ingress "external": allows access from public internet (or VNET if environment is internal only)
 ### ingress "internal": only accessible from within the Container App Environment's VNET
@@ -37,6 +37,7 @@ az containerapp create \
   --name $aca_app \
   --resource-group $RG \
   --environment $ACA_ENV \
+  --workload-profile-name $aca_workload_profile \
   --target-port $target_port \
   --ingress external \
   --image $ACR.azurecr.io/$app:$tag \
@@ -53,13 +54,15 @@ aca_fqdn=$(az containerapp show -n $aca_app -g $RG \
     --output tsv)
 echo "FQDN: $aca_fqdn"
 
+
 ### Test the Container App with curl
 ### NOTE: the container app can be accessed via http OR https://<>, (HTTP gets redirected to HTTPS)
 ### NOTE: Use the URL WITHOUT the target port (which is for the internal container port)
 ### NOTE: Only works if ingress is set to "external"
 ###       If "internal", FQDN only works from VMs/services in the VNET (NOT from debug console - use localhost there)
 curl "https://"$aca_fqdn"/version"
-
+curl "https://"$aca_fqdn"/env-vars"
+curl "https://"$aca_fqdn"/system-info"
 ##############################################################################################
 
 ### Debug the Container App

@@ -44,12 +44,12 @@ app.MapGet("/version", () =>
 ## [Start Docker if not already started]: build, force emulation when running on Mac
 # Move to the app directory
 cd apps/dotnet-http-server/app
-docker image build --platform linux/x86_64 -t $img2 -f Dockerfile .
+docker image build --platform linux/amd64 -t $img2 -f Dockerfile .
 
 ## Run
 docker container list 
 docker container run  --name $cnt2 \
-    --platform linux/x86_64 -it \
+    --platform linux/amd64 -it \
     -p $host_port:$container_port $img2
 
 # New terminal window: test the new version is running locally

@@ -10,19 +10,19 @@ cnt="cnt-${app}"
 img="img-${app}"
 host_port="8080"
 container_port="8080"
-tag="v4.0.0-msghdlr"
+tag="v1.0.0"
 
 ## [Start Docker if not already started]: build, force emulation when running on Mac
 
 ## NOTE! Notice the two ".." at the end instead of just one "." 
 ## This tells Docker to use the parent directory (dotnet-service-bus) as the build context, 
 ##which gives access to both SB.ExampleSender and SB.Utils directories.
-docker image build --platform linux/x86_64 -t $img -f Dockerfile ..
+docker image build --platform linux/amd64 -t $img -f Dockerfile ..
 
 ## Run
 docker container list 
 docker container run  --name $cnt \
-    --platform linux/x86_64 -it \
+    --platform linux/amd64 -it \
     --env-file .env \
     -p $host_port:$container_port $img
 

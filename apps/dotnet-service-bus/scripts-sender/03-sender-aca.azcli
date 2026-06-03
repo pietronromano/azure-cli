@@ -20,8 +20,9 @@ target_port=$container_port
 
 mi="${ORG}-mi-${PROJECT}"
 
-# PREXISTING Container Apps Environment, SEE: aca/aca-acr-env.azcli
+# PREXISTING Container Apps Environment, SEE: aca/02-aca-env.azcli
 aca_env="${ORG}-acaenv-${PROJECT}"
+echo "Container Apps Environment Name: $aca_env"
 
 # See messaging/service-bus.azcli for Service Bus Namespace and Queue variables: sb_namespace, sb_queue
 echo "Service Bus Namespace: $sb_namespace"
@@ -39,8 +40,11 @@ echo "ACA App Name: ${aca_app}  Length:${#aca_app}"
 ### user-assigned: specify the managed identity that we created earlier for ACR access
 ### ingress "external": allows acces from VNET, "internal" only allows access from within the Environment
 
+# WINDOWS: MSYS_NO_PATHCONV=1 prevents Git Bash from converting /subscriptions/... resource IDs to Windows paths
+export MSYS_NO_PATHCONV=1 
+
 mi_id=$(az identity show -g $RG -n $MI --query "id" -o tsv)
-echo "Managed Identity ID: "$mi_id
+echo "Managed Identity ID: $mi_id"
 
 managed_identity_client_id=$(az identity list -g $RG --query "[?name=='$MI'].clientId" -o tsv)
 echo "managed-identity-client-id: $managed_identity_client_id"
@@ -61,6 +65,7 @@ az containerapp create \
   --name $aca_app \
   --resource-group $RG \
   --environment $ACA_ENV \
+  --workload-profile-name $aca_workload_profile \
   --secrets $secrets \
   --env-vars MANAGED_IDENTITY_CLIENT_ID=secretref:managed-identity-client-id \
              SERVICE_BUS_NAMESPACE=$sb_namespace \
@@ -89,7 +94,7 @@ echo "FQDN: $aca_fqdn"
 ### NOTE: the container app can be accessed via http OR https://<>, (HTTP gets redirected to HTTPS)
 ### NOTE: Use the URL WITHOUT the target port (which is for the internal container port)
 ### NOTE: curl needs DOUBLE QUOTES around the URL, otherwise it gets confused with the '&' character in the query string and thinks it's a separate command argument, giving an error like "curl: (6) Could not resolve host: num=10"
-curl "https://"$aca_fqdn"/send?message=HelloFromCurl&num=10"
+curl "https://"$aca_fqdn"/send?message=Hello2FromCurl&num=10&sessionId="
 
 ##############################################################################################
 

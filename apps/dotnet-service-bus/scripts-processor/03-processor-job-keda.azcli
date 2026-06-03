@@ -5,6 +5,9 @@
 # References:
 - https://learn.microsoft.com/en-us/cli/azure/containerapp/job?view=azure-cli-latest#az-containerapp-job-update
 
+# Pre-Requisites:
+- az extension add --name containerapp --upgrade
+
 # NOTE: 
  - Keda should shutdown all replicas after processing messages and waiting the idle timeout ...
  - So add "MonitorIdleTimeout" to the Container App Job .Net Code to make sure it scales down to zero after processing messages and waiting the idle timeout
@@ -36,6 +39,9 @@ idle_timeout_minutes=5
 echo "Idle Timeout (minutes): $idle_timeout_minutes"
 
 ##############################################################################################
+
+# WINDOWS: MSYS_NO_PATHCONV=1 prevents Git Bash from converting /subscriptions/... resource IDs to Windows paths
+export MSYS_NO_PATHCONV=1 
 
 ## Create the Container App Job
 mi_id=$(az identity show -g $RG -n $MI --query "id" -o tsv)
