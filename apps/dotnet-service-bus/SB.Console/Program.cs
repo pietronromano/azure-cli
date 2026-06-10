@@ -4,15 +4,10 @@ using System.Text.Json;
 // Define your message payload
 var payload = new
 {
-  topUpId = "a1b2c3d4-5e6f-7890-abcd-ef1234567890",
-  companyId = "ee5a96e6-92a3-4c00-a58c-68236cf4cb8a",
-  amountCents = 1001100,
-  currency = "EUR",
-  operationDate = "2026-04-15T10:00:00+00:00",
-  country = "ES",
-  type = "funds-load-by-card",
-  concept = "RECARGA DE FONDOS PRUEBA 001",
-  traceId = "test-001"
+  Id = "ddddb2c3d4-5e6f-7890-abcd-ef1234567890",
+  companyId = "essss96e6-92a3-4c00-a58c-68236cf4cb8a",
+  amountCents = 100,
+  currency = "USD"
 };
 
 // Serialize to JSON
