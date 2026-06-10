@@ -55,6 +55,28 @@ app.MapGet("/send", async (string message, int num, string sessionId) =>
 })
 .WithName("Send");
 
+// Send a message to the Service Bus Queue with the message body as JSON in the POST body, and num/sessionId as query parameters
+app.MapPost("/send", async (HttpContext http, int num, string sessionId) =>
+{
+    try
+    {
+        using var reader = new StreamReader(http.Request.Body);
+        string message = await reader.ReadToEndAsync();
+
+        if (string.IsNullOrEmpty(message) || num <= 0)
+        {
+            return "Please provide a valid message body and a positive num query parameter.\nExample: POST /send?num=5&sessionId=abc\n";
+        }
+        await sbSender.TestSendMessageBatch(message, num, sessionId);
+        return $"A batch of {num} messages with body '{message}' has been published to the queue.\n";
+    }
+    catch (Exception ex)
+    {
+        return $"Error sending messages: {ex.Message}";
+    }
+})
+.WithName("SendPost");
+
 
 // Start the application
 app.Run();

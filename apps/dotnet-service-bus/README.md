@@ -36,6 +36,18 @@ dotnet build
 ```
 ---
 
+## Send a REST request to the API endpoint (for testing purposes, using Postman or curl)
+
+```bash
+curl -X POST "http://localhost:5141/send?num=1&sessionId=" \
+-H "Content-Type: application/json" \
+-d '{
+  "Id": "a1b2c3d4-5e6f-7890-abcd-ef1234567890",
+  "companyId": "ss5a96e6-92a3-4c00-a58c-68236cf4cb8a",
+  "amount": 1000,
+  "currency": "USD",
+}'
+```
 
 
 
