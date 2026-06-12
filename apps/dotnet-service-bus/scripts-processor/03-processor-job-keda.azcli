@@ -68,6 +68,9 @@ echo "Secrets: $secrets"
 # Create the Container App Job with KEDA scaling based on Service Bus Queue length
 # SEE: In Portal, menu "Event-driven scaling" appears after creation
 
+# Pre-Requisite
+az extension add --name containerapp --upgrade
+
 # NOTE parallelism: the number of simultaneous executions processing messages
 az containerapp job create \
   --name $aca_app \

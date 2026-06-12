@@ -6,7 +6,7 @@
 
 ###################################################################
 
-# Move to the app directory
+# Move to the app dFirectory
 cd apps/dotnet-http-server/app
 # repository name must be lowercase
 app="dotnethttpserver"
