@@ -1,0 +1,44 @@
+##############################################################################################
+# Create Foundry Resources
+
+# Variables
+TENANT=pluxeegroup.onmicrosoft.com
+SUBSCRIPTION=plx-ccoe-sbx-glb
+LOCATION=swedencentral
+ORG=plx
+PROJECT=ccoe-pnr-fdry
+MI_ROLE="Contributor"
+
+RG="${ORG}-rg-${PROJECT}"
+ACR="${ORG}acr${PROJECT//-/}"
+SA="${ORG}sa${PROJECT//-/}"
+MI="${ORG}-mi-${PROJECT}"
+ACA_ENV="${ORG}-acaenv-${PROJECT}"
+LAW="${ORG}-law-${PROJECT}"
+FOUNDRY="${ORG}-aif-${PROJECT}"
+FOUNDRY_PROJECT1="${FOUNDRY}-project1"
+
+ENV_VARS="TENANT:$TENANT, SUBSCRIPTION:$SUBSCRIPTION, ORG:$ORG, LOCATION:$LOCATION, PROJECT:$PROJECT, RG:$RG " 
+ENV_VARS="$ENV_VARS, ACR:$ACR SA:$SA MI:$MI ACA_ENV:$ACA_ENV AKS_CLU:$AKS_CLU VNET:$VNET LAW:$LAW"
+echo "ENV_VARS: $ENV_VARS"
+
+VNET="${ORG}-vnet-${PROJECT}"
+SNET_FOUNDRY="${ORG}-snet-foundry"
+SNET_PE="${ORG}-snet-pe"
+SNET_ACA="${ORG}-snet-aca"
+SNET_AIGATEWAY="${ORG}-snet-aigateway"
+SNET_JUMPBOX="${ORG}-snet-jumpbox"
+
+##############################################################################################
+# Login with a specific tenant
+az login --tenant $TENANT
+
+# Set a specific Subscription
+az account set -s $SUBSCRIPTION
+
+## Get the subscription ID from the current Azure CLI context:
+AZURE_SUBSCRIPTION_ID=$(az account show --query "id" -o tsv)
+echo "Subscription ID from CLI context: $AZURE_SUBSCRIPTION_ID"
+
+
+

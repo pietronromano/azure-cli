@@ -1,0 +1,37 @@
+##############################################################################################
+# Create Resource Group
+az group create --name $RG --location $LOCATION
+
+##############################################################################################
+# Create the user-assigned managed identity
+az identity create -g $RG -n $MI -l $LOCATION
+
+## List existing managed identities in the resource group
+az identity list -g $RG -o table
+
+### Get the clientId from our managed identity by name
+AZURE_CLIENT_ID=$(az identity list -g $RG --query "[?name=='$MI'].clientId" -o tsv)
+echo "AZURE_CLIENT_ID: $AZURE_CLIENT_ID"
+
+### Get the tenantId from our managed identity by name
+AZURE_TENANT_ID=$(az identity list -g $RG --query "[?name=='$MI'].tenantId" -o tsv)
+echo "Tenant ID: $AZURE_TENANT_ID"
+
+
+##############################################################################################
+# Assign an appropriate role to your user-assigned managed identity.
+## Get the principal ID of the managed identity
+PRINCIPAL_ID=$(az identity show -g $RG -n $MI --query principalId -o tsv)
+echo "Principal ID: $PRINCIPAL_ID"
+
+## Assign the role at the resource group scope
+az role assignment create \
+  --assignee $PRINCIPAL_ID \
+  --role $MI_ROLE \
+  --scope "/subscriptions/$AZURE_SUBSCRIPTION_ID/resourceGroups/$RG"
+
+## Verify the role assignment: (SEE also Portal: Managed Identiy: Azure role assignments)
+az role assignment list \
+  --assignee $PRINCIPAL_ID \
+  --scope "/subscriptions/$AZURE_SUBSCRIPTION_ID/resourceGroups/$RG" \
+  --output table

@@ -1,3 +1,5 @@
+.DS_Store
+
 # Ignore the .env file which contains sensitive information
 .env
 

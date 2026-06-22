@@ -1,0 +1,35 @@
+##############################################################################################
+# Create a Foundry Resource (multi-service resource) for Azure AI Services
+# --allow-project-management flag enables project creation within this resource.
+echo "FOUNDRY=$FOUNDRY"
+
+az cognitiveservices account create \
+    --name $FOUNDRY \
+    --resource-group $RG \
+    --kind AIServices \
+    --sku S0 \
+    --location $LOCATION \
+    --custom-domain $FOUNDRY \
+    --allow-project-management
+
+
+# Create a custom subdomain for the resource. The custom domain name must be globally unique. If my-foundry-resource is taken, try a more unique name.
+az cognitiveservices account update \
+    --name $FOUNDRY \
+    --resource-group $RG \
+    --custom-domain $FOUNDRY
+
+# Create the project. For example, create my-foundry-project in the my-foundry-resource:
+az cognitiveservices account project create \
+    --name $FOUNDRY \
+    --resource-group $RG \
+    --project-name $FOUNDRY_PROJECT1 \
+    --location $LOCATION
+
+# Verify the project was created:
+az cognitiveservices account project show \
+    --name $FOUNDRY \
+    --resource-group $RG \
+    --project-name $FOUNDRY_PROJECT1
+
+# The output displays the project properties, including its resource ID.
