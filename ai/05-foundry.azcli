@@ -1,5 +1,6 @@
 ##############################################################################################
 # Create a Foundry Resource (multi-service resource) for Azure AI Services
+# https://learn.microsoft.com/en-us/cli/azure/cognitiveservices/account?view=azure-cli-latest
 # --allow-project-management flag enables project creation within this resource.
 echo "FOUNDRY=$FOUNDRY"
 

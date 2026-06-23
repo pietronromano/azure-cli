@@ -2,11 +2,11 @@
 # Create Foundry Resources
 
 # Variables
-TENANT=pluxeegroup.onmicrosoft.com
-SUBSCRIPTION=plx-ccoe-sbx-glb
+TENANT=...
+SUBSCRIPTION=...
 LOCATION=swedencentral
-ORG=plx
-PROJECT=ccoe-pnr-fdry
+ORG=...
+PROJECT=...
 MI_ROLE="Contributor"
 
 RG="${ORG}-rg-${PROJECT}"
